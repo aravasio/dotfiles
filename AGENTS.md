@@ -13,8 +13,8 @@ Example: `i3/.config/i3/config` → `~/.config/i3/config`.
 |---------------|-------------|------------|
 | `i3`          | `~/.config/i3` | i3 WM config, i3blocks bar, all bar/launcher scripts, themes |
 | `kitty`       | `~/.config/kitty` | kitty terminal + theme collection + theme-pool (per-window random themes) |
-| `picom`       | `~/.config/picom` | compositor presets 01–09; `picom.conf` symlink switches preset |
-| `rofi`        | `~/.config/rofi` | launchers, powermenu, keyhint themes |
+| `picom`       | `~/.config/picom` | compositor presets 01–08; `picom.conf` symlink switches preset |
+| `rofi`        | `~/.config/rofi` | launchers, powermenu themes |
 | `dunst`       | `~/.config/dunst` | notifications |
 | `zsh`         | `~/.zshrc` + `~/.config/zsh` | modular zsh config (00–60 modules) |
 | `starship`    | `~/.config/starship.toml` | prompt |
