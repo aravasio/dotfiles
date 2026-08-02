@@ -74,6 +74,29 @@ def render_md(text):
         out.append(inline(l)); i += 1
     return '\n'.join(out)
 
+def i3_context():
+    cfg = Path.home() / '.config/i3/config'
+    if not cfg.exists(): return ''
+    try:
+        lines = []
+        for l in cfg.read_text().splitlines():
+            s = l.strip()
+            if not s or s.startswith('#'): continue
+            if re.match(r'^(bindsym|bindcode)\b', s) or s.startswith('set $mod') or re.match(r'^mode\b', s):
+                lines.append(s)
+    except: return ''
+    txt = '\n'.join(lines)
+    if len(txt) > 6000: txt = txt[:6000] + '\n...(truncated)'
+    return 'i3 keybindings (live from ~/.config/i3/config):\n' + txt
+
+def widgets_context():
+    cfg = Path.home() / '.config/i3/i3blocks.conf'
+    if not cfg.exists(): return ''
+    try:
+        blocks = [l.strip()[1:-1] for l in cfg.read_text().splitlines() if l.strip().startswith('[')]
+    except: return ''
+    return 'i3blocks status-bar widgets: ' + ', '.join(blocks) if blocks else ''
+
 def build_context():
     binds = os.popen('grep -c bindsym ~/.config/i3/config').read().strip() or '?'
     d = f'alitoh@endeavouros (Arch Linux)\nKernel: {os.uname().release}\nWM: i3 ({binds} binds)\nTerminal: kitty  Shell: zsh'
@@ -81,11 +104,49 @@ def build_context():
         p = Path.home() / '.config/machine-facts/AGENTS.md'
         s = p.read_text()[:4000] if p.exists() else ''
     except: s = ''
-    return f'Help alitoh with Linux/system questions. Concise, max 3 paragraphs. Include exact commands.\n\nSystem:\n{d}\n\nDetails:\n{s}'
+    return (
+        'Help alitoh with Linux/system questions. Concise, max 3 paragraphs. Include exact commands.\n\n'
+        f'System:\n{d}\n\nDetails:\n{s}\n\n{i3_context()}\n{widgets_context()}\n\n'
+        'You can inspect the system yourself: if you need to look something up, end your reply with a single fenced '
+        'code block containing exactly ONE read-only bash command (allowed: cat, ls, grep, rg, sed, awk, head, tail, '
+        'find, bat, i3-msg, pgrep, ps, free, df, uname, wc, sort, uniq, du, stat, file). It runs locally and its output '
+        'is fed back to you. Use it when unsure instead of guessing. After seeing the output, give the final answer '
+        'without the code block. Never write, delete, or modify anything.'
+    )
+
+_ALLOWED_TOOLS = r'(?:cat|ls|grep|rg|sed|awk|head|tail|find|bat|i3-msg|pgrep|ps|free|df|uname|wc|sort|uniq|du|stat|file)'
+_TOOL_RE = re.compile(r'^' + _ALLOWED_TOOLS + r'(?: [^|\n]*)?(?: \| *' + _ALLOWED_TOOLS + r'(?: [^|\n]*)?)*$')
+_BAD_TOOL = re.compile(r'[><;]|-(?:exec|delete|i)\b|sed -i|curl|wget|\b(?:dd|rm|mv|cp|chmod|chown|mkfs|kill)\b')
+
+_TOOL_BLOCK = re.compile(r'```(?:bash|sh)?\s*\n([^`]+?)```', re.S)
+
+def extract_tool(text):
+    m = _TOOL_BLOCK.search(text)
+    if not m: return None
+    cmd = m.group(1).strip()
+    if not cmd or not _TOOL_RE.match(cmd) or _BAD_TOOL.search(cmd): return 'REJECT'
+    return cmd
+
+def run_tool(cmd):
+    if cmd == 'REJECT':
+        return 'TOOL_ERROR: command rejected (not read-only allowlist). Use only the allowed read-only commands.'
+    try:
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
+        out = (r.stdout + r.stderr).strip()
+    except subprocess.TimeoutExpired:
+        return 'TOOL_ERROR: command timed out after 15s.'
+    except Exception as e:
+        return f'TOOL_ERROR: {e}'
+    if not out: out = '(no output)'
+    if len(out) > 6000: out = out[:6000] + '\n...(truncated)'
+    return f'Output of `{cmd}`:\n{out}'
+
+def strip_tool_block(text):
+    return _TOOL_BLOCK.sub('', text).rstrip()
 
 def query(q, msgs):
     global _OR_FAILED
-    msgs.append({'role':'user','content':q})
+    if q: msgs.append({'role':'user','content':q})
     if MODE == 'openrouter' and not _OR_FAILED:
         payload = json.dumps({'model':MODEL,'messages':msgs,'max_tokens':32768})
         resp = subprocess.run(['curl','-s','-w','\n%{http_code}','--max-time','120',OPENROUTER,
@@ -117,6 +178,15 @@ def query(q, msgs):
     msgs.append({'role':'assistant','content':a})
     return a
 
+def ask(q, msgs, max_tools=6):
+    a = query(q, msgs)
+    for _ in range(max_tools):
+        cmd = extract_tool(a)
+        if cmd is None: break
+        msgs.append({'role':'user','content':run_tool(cmd)})
+        a = query('', msgs)
+    return a
+
 def chat(first=None):
     ctx = build_context()
     msgs = [{'role':'system','content':ctx}]
@@ -129,10 +199,10 @@ def chat(first=None):
             except: break
             if not q or not q.strip(): break
             q = q.strip()
-        query(q, msgs)
+        ask(q, msgs)
         q = None
         # render last exchange and page through less
-        last = msgs[-1]['content']
+        last = strip_tool_block(msgs[-1]['content'])
         fmt = f'{B}{PINK}▶{R} ' + render_md(last)
         pager = subprocess.Popen(['less','-R','-X'], stdin=subprocess.PIPE)
         pager.stdin.write(fmt.encode())
