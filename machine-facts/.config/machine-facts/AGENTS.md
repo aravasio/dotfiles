@@ -100,6 +100,17 @@ python3 -c "import tomllib; tomllib.load(open('<file.toml>','rb'))"
 - Assume a GUI action succeeded without evidence — many reloads cannot be
   triggered from a non-interactive shell.
 
+## Dotfiles repo (added 2026-08)
+
+- All configs are versioned in **~/dotfiles** (public:
+  github.com/aravasio/dotfiles) and symlinked into `$HOME` — editing a config
+  edits the repo. Commit + push after meaningful changes.
+- Layout is stow-compatible (package per app); `~/dotfiles/install.sh`
+  restores everything with backups. `~/dotfiles/AGENTS.md` has the full
+  restore guide for a fresh system.
+- **Secrets never go in the repo**: they live in `~/.zshrc.local`
+  (gitignored), e.g. `OPENROUTER_API_KEY_FOR_FREE_MODELS` used by `q-chat`.
+
 ## Local features (added 2026-07)
 
 - **kitty per-window random theme**: `$mod+Return` runs
