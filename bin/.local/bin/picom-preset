@@ -24,7 +24,9 @@ die() { echo "picom-preset: $*" >&2; exit 1; }
 mapfile -t PRESETS < <(find -L "$PRESETS_DIR" -maxdepth 1 -name '*.conf' -type f | sort)
 (( ${#PRESETS[@]} )) || die "no presets found in $PRESETS_DIR"
 
-current_path() { [[ -L "$ACTIVE" ]] && readlink -f "$ACTIVE"; }
+# single-level readlink: picom.conf -> presets/<name>.conf (same form find -L
+# returns), NOT resolved into the dotfiles repo, or the position match never hits.
+current_path() { [[ -L "$ACTIVE" ]] && readlink "$ACTIVE"; }
 name_of()      { basename "$1" .conf; }
 title_of()     { sed -n 's/^#  picom preset: //p' "$1" | head -1; }
 desc_of()      { sed -n '3s/^#  //p' "$1"; }

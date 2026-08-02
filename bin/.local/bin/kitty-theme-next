@@ -12,9 +12,11 @@ if [ "${#themes[@]}" -eq 0 ]; then
   exit 1
 fi
 
+# single-level readlink: theme.conf -> live paths (same form rg returns), NOT
+# resolved into the dotfiles repo, or the position match would never hit.
 current_target=""
 if [ -L "$current_link" ]; then
-  current_target="$(readlink -f "$current_link" || true)"
+  current_target="$(readlink "$current_link" || true)"
 fi
 
 idx=0
