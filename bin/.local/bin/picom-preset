@@ -20,7 +20,8 @@ die() { echo "picom-preset: $*" >&2; exit 1; }
 
 [[ -d "$PRESETS_DIR" ]] || die "no presets directory at $PRESETS_DIR"
 
-mapfile -t PRESETS < <(find "$PRESETS_DIR" -maxdepth 1 -name '*.conf' -type f | sort)
+# -L: presets live are symlinks into the dotfiles repo; find must follow them
+mapfile -t PRESETS < <(find -L "$PRESETS_DIR" -maxdepth 1 -name '*.conf' -type f | sort)
 (( ${#PRESETS[@]} )) || die "no presets found in $PRESETS_DIR"
 
 current_path() { [[ -L "$ACTIVE" ]] && readlink -f "$ACTIVE"; }

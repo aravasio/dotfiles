@@ -4,7 +4,8 @@ set -euo pipefail
 themes_dir="/home/alitoh/.config/kitty/kitty-themes/themes"
 current_link="/home/alitoh/.config/kitty/theme.conf"
 
-mapfile -t themes < <(rg --files -g '*[mM]onokai*.conf' "$themes_dir" | sort)
+# -L: themes live are symlinks into the dotfiles repo; rg must follow them
+mapfile -t themes < <(rg -L --files -g '*[mM]onokai*.conf' "$themes_dir" | sort)
 
 if [ "${#themes[@]}" -eq 0 ]; then
   echo "No Monokai themes found in $themes_dir" >&2

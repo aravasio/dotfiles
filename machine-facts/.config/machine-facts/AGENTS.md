@@ -10,7 +10,7 @@ project-specific opinions. Project rules belong in each repo's own AGENTS.md.
 ## What it is
 
 - **EndeavourOS** (Arch-based), kernel 6.18, **X11**
-- **i3** window manager, `$mod` = Mod4/Super, ~110 keybindings, i3blocks status bar
+- **i3** window manager, `$mod` = Mod4/Super, ~87 keybindings, i3blocks status bar
 - **picom** v12.5 compositor · **kitty** terminal · **zsh + Oh My Zsh** · **dunst** · **rofi** · **feh** · **i3lock**
 - NVIDIA RTX 3070 (proprietary driver), single 3440x1440 ultrawide
 - User: `alitoh`
@@ -49,8 +49,8 @@ Anything new that shows color should use these hexes.
   Expected side effect, not a bug — but don't reload i3 casually on a busy screen.
 - **picom's v12 `animations` engine is the CONFIRMED cause of the 2026-07-26
   full-desktop freezes** (3/3 crash boots with it, 0 without — GLX + NVIDIA 590).
-  It is stripped from all presets (originals in
-  `~/.config/picom/presets-animated-backup-*.tgz`). Do NOT reintroduce an
+  It is stripped from all presets (originals archived in the
+  `~/.cleanup-quarantine-*` backup, 2026-08 cleanup). Do NOT reintroduce an
   `animations` block unless the user explicitly asks and a fresh A/B test is run.
 - **`reload-picom` / `reload-dunst` / `reload-i3` are zsh aliases**
   (`~/.config/zsh/40-aliases.zsh`) — they exist only in interactive shells,
@@ -130,8 +130,8 @@ python3 -c "import tomllib; tomllib.load(open('<file.toml>','rb'))"
 - **theme-forge**: `~/.config/theme-forge/` — docs to generate full desktop
   themes from keywords (AGENTS.md + PALETTE.md + KEYWORDS.md +
   PROMPT-TEMPLATE.md). Point future LLM runs there. STATUS.md = live state.
-- **Keybind changes**: screenshot-select moved `$mod+Shift+p` → `$mod+Print`
-  (it was duplicated with the picom preset menu, which keeps `$mod+Shift+p`).
+- **Keybind changes**: screenshot-select is `$mod+Shift+o`, screenshot-active `$mod+o`
+  (was `$mod+Shift+p`, duplicated with the picom preset menu which keeps `$mod+Shift+p`).
 - **YouTube lite theater-mode**: v1 (userContent.css) failed, disabled.
   v2 plan (PiP window + picom focus-exclude) in theme-forge/STATUS.md.
 

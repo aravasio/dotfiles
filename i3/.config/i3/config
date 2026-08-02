@@ -201,8 +201,9 @@ bindsym $mod+Shift+r restart
 # quick LLM question: rofi → kitty with glow-rendered answer
 bindsym $mod+Shift+q exec --no-startup-id ~/.local/bin/q-ask
 
-# keybinding in fancy rofi (automated):
-bindsym F1 exec --no-startup-id ~/.config/i3/scripts/keyhint-2
+# F1 = keybinding helper. keyhint-2 (grep-based) removed in cleanup;
+# repointed to the generated cheatsheet ($mod+h) so the key stays useful.
+bindsym F1 exec --no-startup-id ~/.config/i3/scripts/toggle-cheatsheet
 # alternative
 # keybinding list in editor:
 # bindsym $mod+F1 exec --no-startup-id xed ~/.config/i3/keybindings
