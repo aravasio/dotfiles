@@ -1,0 +1,54 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow",
+  "plugin": [
+    "./plugins/caveman/plugin.js"
+  ],
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "qwen3-coder:30b-8192k": {
+          "name": "Qwen3-Coder:30b (8K ctx)"
+        },
+        "qwen3-coder:30b-16384k": {
+          "name": "Qwen3-Coder:30b (16K ctx)"
+        },
+        "qwen3-coder:30b-32768k": {
+          "name": "Qwen3-Coder:30b (32K ctx)"
+        },
+        "qwen3-coder:30b-ctx": {
+          "name": "Qwen3-Coder:30b (65K ctx)"
+        },
+        "qwen3-coder:30b-256k": {
+          "name": "Qwen3-Coder:30b (256K ctx)"
+        },
+        "qwen3.6:35b-8192k": {
+          "name": "Qwen3.6:35b (8K ctx)"
+        },
+        "qwen3.6:35b-16384k": {
+          "name": "Qwen3.6:35b (16K ctx)"
+        },
+        "qwen3.6:35b-32768k": {
+          "name": "Qwen3.6:35b (32K ctx)"
+        },
+        "qwen3.6:35b-ctx": {
+          "name": "Qwen3.6:35b (65K ctx)"
+        },
+        "qwen3.6:35b-256k": {
+          "name": "Qwen3.6:35b (256K ctx)"
+        },
+        "qwen3-coder-next:65k": {
+          "name": "Qwen3-Coder-Next (65K ctx)"
+        },
+        "qwen3-coder-next:256k": {
+          "name": "Qwen3-Coder-Next (256K ctx)"
+        }
+      }
+    }
+  }
+}

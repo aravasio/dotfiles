@@ -106,7 +106,9 @@ F1
 +m starts Music
 +y starts YouTube
 +n starts Thunar
- Button screenshot
++Shift+q starts Q-chat
++o Button active-window screenshot
++Shift+o Button area screenshot
 
 ## Custom tools
 # open a markdown file in a floating viewer with search (use / to search)

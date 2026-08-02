@@ -96,6 +96,7 @@ def describe(command: str) -> str:
         (r'^exec .*playerctl previous$', lambda m: "Previous track"),
         (r'^exec .*audio-device-switch$', lambda m: "Switch audio output device"),
         (r'^exec .*power-profiles$', lambda m: "Open power profile menu"),
+        (r'^exec .*/q-ask$', lambda m: "Launch Q-chat"),
         (r'^exec .*screenshot-select$', lambda m: "Take area screenshot"),
         (r'^exec .*screenshot-active$', lambda m: "Take active-window screenshot"),
         (r'^exec .*/firefox$', lambda m: "Launch Firefox"),
@@ -134,7 +135,7 @@ def group_for(command: str) -> str:
         return "Session"
     if any(token in cmd for token in ["Audio", "brightness", "volume", "playerctl", "amixer", "power-profiles", "audio-device-switch"]):
         return "Media and Hardware"
-    if any(token in cmd for token in ["firefox", "thunar", "music", "rofi", "screenshot", "keyhint", "toggle-cheatsheet"]):
+    if any(token in cmd for token in ["firefox", "thunar", "music", "rofi", "screenshot", "keyhint", "toggle-cheatsheet", "q-ask"]):
         return "Launchers and Tools"
     return "Other"
 

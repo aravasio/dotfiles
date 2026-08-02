@@ -1,0 +1,7 @@
+case "${DISPLAY:-}" in
+  :[1-9]*|localhost:[1-9]*)
+    export REMOTE_VNC_SESSION=1
+    export XDG_CURRENT_DESKTOP=i3
+    export DESKTOP_SESSION=i3
+    ;;
+esac

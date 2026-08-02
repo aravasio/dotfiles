@@ -16,7 +16,9 @@ Main() {
         "+n" "open Filebrowser" ""
         "+d" "app menu" ""
         "+q" "close focused app" ""
-        "Print-key" "screenshot" ""
+        "+o" "active-window screenshot" ""
+        "+Shift+o" "area screenshot" ""
+        "+Shift+q" "Q-chat" ""
         "+Shift+e" "logout menu" ""
         "F1" "open keybinding helper" ""
     )
