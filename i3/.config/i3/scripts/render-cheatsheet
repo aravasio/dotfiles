@@ -97,16 +97,26 @@ def describe(command: str) -> str:
         (r'^exec .*audio-device-switch$', lambda m: "Switch audio output device"),
         (r'^exec .*power-profiles$', lambda m: "Open power profile menu"),
         (r'^exec .*/q-ask$', lambda m: "Launch Q-chat"),
-        (r'^exec .*screenshot-select$', lambda m: "Take area screenshot"),
-        (r'^exec .*screenshot-active$', lambda m: "Take active-window screenshot"),
+        (r'^exec .*/youtube$', lambda m: "Launch YouTube"),
+        (r'^exec .*/kitty-randtheme$', lambda m: "Launch random terminal theme"),
+        (r'^exec .*/i3-border-pulse$', lambda m: "Toggle border pulse"),
+        (r'^exec .*/screenshot-select$', lambda m: "Take area screenshot"),
+        (r'^exec .*/screenshot-active$', lambda m: "Take active-window screenshot"),
+        (r'^exec .*/powermenu$', lambda m: "Open power menu"),
+        (r'^exec .*/blur-lock$', lambda m: "Lock the screen"),
+        (r'^exec .*/empty_workspace$', lambda m: "Create a new empty workspace"),
+        (r'^exec .*/audio-device-switch$', lambda m: "Switch audio output device"),
+        (r'^exec .*/power-profiles$', lambda m: "Open power profile menu"),
+        (r'^exec .*/picom-preset-menu$', lambda m: "Open picom preset menu"),
+        (r'^exec .*/picom-preset\s', lambda m: "Cycle picom preset"),
+        (r'^exec .*/i3-smart-switch prev$', lambda m: "Previous window switch"),
+        (r'^exec .*/i3-smart-switch$', lambda m: "Smart window switch"),
         (r'^exec .*/firefox$', lambda m: "Launch Firefox"),
         (r'^exec .*/thunar$', lambda m: "Launch Thunar"),
         (r'^exec .*\.local/bin/music$', lambda m: "Launch Music"),
         (r'^exec .*\.local/bin/whatsapp$', lambda m: "Launch WhatsApp"),
         (r'^exec .*rofi .* -show drun.*$', lambda m: "Open app launcher"),
         (r'^exec .*rofi .* -show window.*$', lambda m: "Open window switcher"),
-        (r'^exec .*i3-smart-switch prev$', lambda m: "Previous window switch"),
-        (r'^exec .*i3-smart-switch$', lambda m: "Smart window switch"),
         (r'^exec .*kitty$', lambda m: "Launch terminal"),
         (r'^exec .*amixer -D pulse sset Master 1%\+$', lambda m: "Increase volume by 1%"),
         (r'^exec .*amixer -D pulse sset Master 1%-$', lambda m: "Decrease volume by 1%"),
@@ -135,7 +145,7 @@ def group_for(command: str) -> str:
         return "Session"
     if any(token in cmd for token in ["Audio", "brightness", "volume", "playerctl", "amixer", "power-profiles", "audio-device-switch"]):
         return "Media and Hardware"
-    if any(token in cmd for token in ["firefox", "thunar", "music", "rofi", "screenshot", "keyhint", "toggle-cheatsheet", "q-ask"]):
+    if any(token in cmd for token in ["firefox", "thunar", "music", "rofi", "screenshot", "keyhint", "toggle-cheatsheet", "q-ask", "youtube", "kitty-randtheme", "i3-border-pulse", "picom-preset", "picom-preset-menu"]):
         return "Launchers and Tools"
     return "Other"
 
