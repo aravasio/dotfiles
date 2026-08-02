@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# freeze-watchdog — snapshots top processes when the system gets sluggish,
+# so the next freeze leaves evidence. Cheap: sleeps 4s between samples,
+# only writes to disk when load1 crosses the threshold.
+#
+#   freeze-watchdog          run in foreground (or setsid it)
+#   log: ~/.cache/freeze-watchdog.log
+#
+# After a freeze, read the END of the log: the last snapshot before the
+# stall usually shows the culprit at 90-100% CPU.
+
+set -uo pipefail
+
+LOG="$HOME/.cache/freeze-watchdog.log"
+interval=4
+# trigger when load1 > 70% of online cores
+cores=$(nproc)
+threshold=$(awk -v c="$cores" 'BEGIN{printf "%.1f", c*0.7}')
+
+while true; do
+  read -r load1 _ < /proc/loadavg
+  if awk -v l="$load1" -v t="$threshold" 'BEGIN{exit !(l>t)}'; then
+    {
+      echo "════ $(date '+%F %T') load=$load1 (threshold $threshold / $cores cores) ════"
+      ps -eo pid,ppid,%cpu,%mem,stat,etime,comm --sort=-%cpu | head -12
+      echo "--- picom/xorg ---"
+      ps -C picom,Xorg -o pid,%cpu,%mem,stat,etime,comm 2>/dev/null
+      echo
+    } >>"$LOG"
+  fi
+  sleep "$interval"
+done

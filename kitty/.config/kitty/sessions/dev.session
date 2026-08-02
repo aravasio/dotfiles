@@ -1,0 +1,20 @@
+# kitty --session ~/.config/kitty/sessions/dev.session
+# Three tabs: a split code tab, a full-width Claude tab, a scratch shell.
+
+new_tab code
+layout splits
+cd ~
+launch --title editor zsh
+launch --location=vsplit --title run zsh
+
+new_tab claude
+layout stack
+cd ~
+launch --title claude zsh
+
+new_tab scratch
+layout tall
+cd ~
+launch --title scratch zsh
+
+focus_matching_window title:claude

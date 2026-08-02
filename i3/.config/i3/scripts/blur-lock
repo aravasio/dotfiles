@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Screen locker: blurred screenshot, darkened and tinted to the Monokai Boosted
+# palette, with a vignette so the center stays readable.
+#
+# Every effect is optional — if magick fails for any reason the plain screenshot
+# is used, so locking the screen never breaks.
+
+PICTURE=/tmp/i3lock.png
+TINTED=/tmp/i3lock-tinted.png
+
+BLUR="0x6"
+INK="#16161a"       # base background
+ACCENT="#ff6ac1"    # hot pink
+
+cleanup() {
+  for f in "$PICTURE" "$TINTED"; do
+    [ -f "$f" ] && { shred -u "$f" 2>/dev/null || rm -f "$f"; }
+  done
+}
+trap cleanup EXIT
+
+scrot -z "$PICTURE" || exit 1
+
+if magick "$PICTURE" \
+     -blur "$BLUR" \
+     -modulate 88,115 \
+     -fill "$ACCENT" -colorize 7 \
+     -fill "$INK"    -colorize 32 \
+     -background '#0a0a0c' -vignette 0x55+0+0 \
+     "$TINTED" 2>/dev/null && [ -s "$TINTED" ]; then
+  LOCK_IMAGE="$TINTED"
+else
+  LOCK_IMAGE="$PICTURE"
+fi
+
+i3lock --image "$LOCK_IMAGE" --ignore-empty-password --show-failed-attempts

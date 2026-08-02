@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Switch picom presets the same way kitty-theme-next switches kitty themes:
+# ~/.config/picom/picom.conf is a symlink into ~/.config/picom/presets/.
+#
+#   picom-preset              show the active preset
+#   picom-preset list         list all presets
+#   picom-preset next|prev    cycle
+#   picom-preset random       surprise
+#   picom-preset 02-neon      switch by name (prefix match: `picom-preset neon`)
+#
+# A preset is validated before it is applied — a broken config can never take
+# down the compositor.
+
+set -uo pipefail
+
+PRESETS_DIR="$HOME/.config/picom/presets"
+ACTIVE="$HOME/.config/picom/picom.conf"
+
+die() { echo "picom-preset: $*" >&2; exit 1; }
+
+[[ -d "$PRESETS_DIR" ]] || die "no presets directory at $PRESETS_DIR"
+
+mapfile -t PRESETS < <(find "$PRESETS_DIR" -maxdepth 1 -name '*.conf' -type f | sort)
+(( ${#PRESETS[@]} )) || die "no presets found in $PRESETS_DIR"
+
+current_path() { [[ -L "$ACTIVE" ]] && readlink -f "$ACTIVE"; }
+name_of()      { basename "$1" .conf; }
+title_of()     { sed -n 's/^#  picom preset: //p' "$1" | head -1; }
+desc_of()      { sed -n '3s/^#  //p' "$1"; }
+
+current_index() {
+  local cur; cur=$(current_path)
+  local i
+  for i in "${!PRESETS[@]}"; do
+    [[ "${PRESETS[$i]}" == "$cur" ]] && { echo "$i"; return; }
+  done
+  echo -1
+}
+
+apply() {
+  local file="$1"
+  [[ -r "$file" ]] || die "cannot read $file"
+
+  # Validate before touching anything.
+  if timeout 15 picom --config "$file" --diagnostics 2>&1 |
+       grep -qiE "configuration file error|cannot parse|invalid value"; then
+    die "$(name_of "$file") has config errors — not applying"
+  fi
+
+  # First run: the active config is still a regular file. Keep a copy.
+  if [[ -e "$ACTIVE" && ! -L "$ACTIVE" ]]; then
+    cp -a "$ACTIVE" "$ACTIVE.bak.$(date +%Y%m%d-%H%M%S)"
+  fi
+
+  ln -sfn "$file" "$ACTIVE"
+
+  pkill -x picom 2>/dev/null
+  sleep 0.3
+  setsid picom --config "$ACTIVE" -b >/dev/null 2>&1
+
+  sleep 0.5
+  if pgrep -x picom >/dev/null; then
+    local msg="$(title_of "$file") — $(desc_of "$file")"
+    echo "picom: $(name_of "$file")"
+    command -v notify-send >/dev/null &&
+      notify-send -a "picom" -u low -t 3000 "  $(title_of "$file")" "$(desc_of "$file")"
+  else
+    echo "picom failed to start with $(name_of "$file")" >&2
+    echo "run manually to see why:  picom --config $ACTIVE" >&2
+    exit 1
+  fi
+}
+
+resolve() {  # accepts full name, prefix, or index
+  local q="$1" p
+  for p in "${PRESETS[@]}"; do
+    [[ "$(name_of "$p")" == "$q" ]] && { echo "$p"; return; }
+  done
+  for p in "${PRESETS[@]}"; do
+    [[ "$(name_of "$p")" == *"$q"* ]] && { echo "$p"; return; }
+  done
+  return 1
+}
+
+cmd="${1:-current}"
+case "$cmd" in
+  list|ls)
+    cur=$(current_path)
+    for p in "${PRESETS[@]}"; do
+      mark=" "; [[ "$p" == "$cur" ]] && mark="*"
+      printf " %s %-12s %s\n" "$mark" "$(name_of "$p")" "$(desc_of "$p")"
+    done
+    ;;
+  current|"")
+    cur=$(current_path)
+    [[ -n "$cur" ]] && echo "$(name_of "$cur") — $(desc_of "$cur")" || echo "no preset active (picom.conf is not a symlink)"
+    ;;
+  next)
+    i=$(current_index); apply "${PRESETS[$(( (i + 1) % ${#PRESETS[@]} ))]}"
+    ;;
+  prev)
+    i=$(current_index); (( i < 0 )) && i=0
+    apply "${PRESETS[$(( (i - 1 + ${#PRESETS[@]}) % ${#PRESETS[@]} ))]}"
+    ;;
+  random)
+    apply "${PRESETS[RANDOM % ${#PRESETS[@]}]}"
+    ;;
+  -h|--help|help)
+    sed -n '2,14p' "$0" | sed 's/^# \?//'
+    ;;
+  *)
+    target=$(resolve "$cmd") || die "unknown preset: $cmd (try: picom-preset list)"
+    apply "$target"
+    ;;
+esac

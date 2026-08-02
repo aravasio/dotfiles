@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Installs the tools the terminal config expects.
+# Everything is optional — the configs degrade gracefully if a tool is missing.
+# Run:  install-terminal-tools          (all groups)
+#       install-terminal-tools core     (just the essentials)
+
+set -euo pipefail
+
+CORE=(
+  starship                  # the prompt
+  eza                       # ls with icons + git status
+  zoxide                    # smarter cd (z / zi)
+  git-delta                 # side-by-side colored git diffs
+  vivid                     # generates LS_COLORS
+  zsh-autosuggestions       # inline history suggestions
+  zsh-syntax-highlighting   # colored command line
+  fastfetch                 # startup banner
+  xclip                     # clipboard for CLI tools
+  pacman-contrib            # checkupdates, used by /sysreport
+)
+
+EXTRA=(
+  lazygit hyperfine tokei onefetch dust procs atuin yazi gum chafa reflector
+)
+
+FUN=(
+  cava cmatrix lolcat figlet
+)
+
+AUR=(
+  fzf-tab-git               # fzf-powered tab completion menu
+  pipes.sh asciiquarium     # screensaver nonsense
+)
+
+group="${1:-all}"
+
+install_repo() {
+  echo "==> pacman: $*"
+  sudo pacman -S --needed --noconfirm "$@"
+}
+
+install_aur() {
+  command -v yay >/dev/null || { echo "yay not found, skipping AUR"; return 0; }
+  echo "==> AUR: $*"
+  yay -S --needed --noconfirm "$@"
+}
+
+case "$group" in
+  core)  install_repo "${CORE[@]}" ;;
+  extra) install_repo "${EXTRA[@]}" ;;
+  fun)   install_repo "${FUN[@]}" ;;
+  aur)   install_aur  "${AUR[@]}" ;;
+  all)
+    install_repo "${CORE[@]}" "${EXTRA[@]}" "${FUN[@]}"
+    install_aur "${AUR[@]}"
+    ;;
+  *) echo "usage: $0 [all|core|extra|fun|aur]"; exit 1 ;;
+esac
+
+echo
+echo "done. now:  exec zsh"

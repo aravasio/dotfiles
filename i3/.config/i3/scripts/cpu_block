@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+warn_usage="${CPU_U_WARN:-70}"
+crit_usage="${CPU_U_CRIT:-90}"
+warn_temp="${CPU_T_WARN:-75}"
+crit_temp="${CPU_T_CRIT:-85}"
+ok_color="${OK_COLOR:-#48b8ff}"
+warn_color="${WARN_COLOR:-#ffa41f}"
+crit_color="${CRIT_COLOR:-#ff2d6f}"
+missing_color="${MISSING_COLOR:-#a6a696}"
+sample_sec="${CPU_SAMPLE_SEC:-0.20}"
+
+notify() {
+  if command -v dunstify >/dev/null 2>&1; then
+    dunstify -a "i3-cpublock" -u normal -t 5000 \
+      -h string:x-dunst-stack-tag:cpu "CPU Details" "$1" >/dev/null 2>&1 || true
+    return 0
+  fi
+  command -v notify-send >/dev/null 2>&1 || return 0
+  notify-send -a "i3-cpublock" -u normal -t 5000 "CPU Details" "$1" >/dev/null 2>&1 || true
+}
+
+read_cpu_totals() {
+  awk '/^cpu /{
+    total=0
+    for(i=2;i<=NF;i++) total+=$i
+    idle=$5+$6
+    print total, idle
+    exit
+  }' /proc/stat
+}
+
+read -r t1 i1 <<< "$(read_cpu_totals)"
+sleep "${sample_sec}"
+read -r t2 i2 <<< "$(read_cpu_totals)"
+
+usage="$(
+  awk -v t1="${t1}" -v i1="${i1}" -v t2="${t2}" -v i2="${i2}" 'BEGIN {
+    dt=t2-t1; di=i2-i1
+    if (dt <= 0) print 0
+    else printf "%.0f", ((dt-di)*100)/dt
+  }'
+)"
+temp="$(sensors 2>/dev/null | grep -E 'Tdie|Tctl|Package id 0' | grep -oP '\+?[0-9]+\.\d+(?=°C)' | tr -d '+' | head -n1 || true)"
+
+if [[ -z "${usage}" && -z "${temp}" ]]; then
+  echo "CPU --"
+  echo "CPU --"
+  echo "${missing_color}"
+  exit 0
+fi
+
+if [[ -z "${usage}" ]]; then
+  usage="--"
+fi
+
+if [[ -z "${temp}" ]]; then
+  text="CPU ${usage}% (--C)"
+  echo "${text}"
+  echo "${text}"
+  echo "${missing_color}"
+  exit 0
+fi
+
+usage_int=0
+if [[ "${usage}" =~ ^[0-9]+$ ]]; then
+  usage_int="${usage}"
+fi
+temp_int="${temp%.*}"
+
+color="${ok_color}"
+if (( usage_int >= crit_usage || temp_int >= crit_temp )); then
+  color="${crit_color}"
+elif (( usage_int >= warn_usage || temp_int >= warn_temp )); then
+  color="${warn_color}"
+fi
+
+text="CPU ${usage_int}% (${temp}C)"
+
+if [[ -n "${BLOCK_BUTTON:-}" ]]; then
+  cores="$(
+    mpstat -P ALL 1 1 2>/dev/null \
+      | awk '/Average:/ && $2 ~ /^[0-9]+$/ {printf "CPU%s: %.0f%%\n", $2, 100-$NF}' \
+      | head -n 8
+  )"
+  load="$(awk '{printf "Load: %s %s %s", $1,$2,$3}' /proc/loadavg 2>/dev/null || true)"
+  top_proc="$(ps -eo pid,comm,%cpu --sort=-%cpu | sed -n '2p' | awk '{printf "Top: PID %s %s (%s%%)", $1,$2,$3}' || true)"
+  details="${text}"
+  [[ -n "${load}" ]] && details+=$'\n'"${load}"
+  [[ -n "${top_proc}" ]] && details+=$'\n'"${top_proc}"
+  [[ -n "${cores}" ]] && details+=$'\n\n'"${cores}"
+  notify "${details}"
+fi
+
+echo "${text}"
+echo "${text}"
+echo "${color}"

@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+wid=$(xprop -root _NET_ACTIVE_WINDOW 2>/dev/null | awk -F' ' '{print $NF}')
+if [[ -z "${wid}" || "${wid}" == "0x0" ]]; then
+  echo ""
+  exit 0
+fi
+
+wm_class=$(xprop -id "${wid}" WM_CLASS 2>/dev/null | sed -E 's/^WM_CLASS\([^)]*\) = //')
+
+title=$(xprop -id "${wid}" _NET_WM_NAME 2>/dev/null | sed -E 's/^_NET_WM_NAME\([^)]*\) = "//; s/"$//')
+if [[ -z "${title}" ]]; then
+  title=$(xprop -id "${wid}" WM_NAME 2>/dev/null | sed -E 's/^WM_NAME\([^)]*\) = "//; s/"$//')
+fi
+raw_title="${title}"
+
+if [[ "${wm_class}" == *'"Music"'* ]]; then
+  title=""
+  player=""
+  if command -v playerctl >/dev/null 2>&1; then
+    player=$(playerctl -l 2>/dev/null | grep '^firefox' | head -n1 || true)
+  fi
+
+  if [[ -n "${player}" ]]; then
+    artist=$(playerctl --player "${player}" metadata artist 2>/dev/null || true)
+    track=$(playerctl --player "${player}" metadata title 2>/dev/null || true)
+    album=$(playerctl --player "${player}" metadata album 2>/dev/null || true)
+
+    parts=()
+    [[ -n "${artist}" ]] && parts+=("${artist}")
+    [[ -n "${track}" ]] && parts+=("${track}")
+    [[ -n "${album}" ]] && parts+=("${album}")
+
+    if [[ "${#parts[@]}" -gt 0 ]]; then
+      formatted=""
+      for part in "${parts[@]}"; do
+        if [[ -z "${formatted}" ]]; then
+          formatted="${part}"
+        else
+          formatted="${formatted} - ${part}"
+        fi
+      done
+      title="Music: ${formatted}"
+    fi
+  fi
+
+  if [[ -z "${title}" ]]; then
+    title=$(printf "%s" "${raw_title}" | sed -E \
+    -e 's/ - Mozilla Firefox$//' \
+    -e 's/ -- Mozilla Firefox$//' \
+    -e 's/ \| YouTube Music$//' \
+    -e 's/ - YouTube Music$//' \
+    -e 's/ -- YouTube Music$//' \
+    -e 's/^YouTube Music$/Music/')
+    if [[ -z "${title}" ]]; then
+      title="Music"
+    elif [[ "${title}" != "Music" ]]; then
+      title="Music: ${title}"
+    fi
+  fi
+fi
+
+if [[ "${wm_class}" == *'"WhatsApp"'* ]]; then
+  title=$(printf "%s" "${raw_title}" | sed -E \
+    -e 's/ - Mozilla Firefox$//' \
+    -e 's/ -- Mozilla Firefox$//' \
+    -e 's/ \| WhatsApp$//' \
+    -e 's/ - WhatsApp$//' \
+    -e 's/ -- WhatsApp$//' \
+    -e 's/ \| WhatsApp Web$//' \
+    -e 's/ - WhatsApp Web$//' \
+    -e 's/ -- WhatsApp Web$//' \
+    -e 's/^WhatsApp(Web)?$/WhatsApp/')
+  if [[ -z "${title}" ]]; then
+    title="WhatsApp"
+  elif [[ "${title}" != "WhatsApp" ]]; then
+    title="WhatsApp: ${title}"
+  fi
+fi
+
+if [[ -n "${BLOCK_BUTTON:-}" ]]; then
+  printf "%s" "${title}" | xclip -selection clipboard 2>/dev/null
+fi
+
+max_len="${TITLE_MAX_LEN:-70}"
+if [[ "${#title}" -gt "${max_len}" ]]; then
+  title="${title:0:max_len-3}..."
+fi
+
+echo "${title}"

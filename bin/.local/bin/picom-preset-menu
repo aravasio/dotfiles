@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# rofi picker for picom presets. Bound to $mod+Shift+p.
+set -uo pipefail
+
+# i3 spawns this without ~/.local/bin on PATH.
+PATH="$HOME/.local/bin:$PATH"
+
+choice=$(picom-preset list |
+  sed 's/^ \* /● /; s/^   /  /' |
+  rofi -dmenu -i -p "picom" -lines 8 \
+       -config "$HOME/.config/rofi/rofidmenu.rasi" 2>/dev/null)
+
+[[ -z "$choice" ]] && exit 0
+
+# strip the active marker, take the preset name
+name=$(sed 's/^● //; s/^ *//' <<<"$choice" | awk '{print $1}')
+[[ -n "$name" ]] && exec picom-preset "$name"

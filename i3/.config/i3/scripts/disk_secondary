@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Find root backing disk (e.g. nvme1n1 from /dev/nvme1n1p2)
+root_src="$(findmnt -no SOURCE / 2>/dev/null || true)"
+root_base=""
+if [[ -n "${root_src}" ]]; then
+  root_base="$(lsblk -no PKNAME "${root_src}" 2>/dev/null || true)"
+fi
+
+# Pick first physical disk that is not the root backing disk
+secondary="$(lsblk -dn -o NAME,TYPE | awk -v r="${root_base}" '$2=="disk" && $1!=r {print $1; exit}')"
+
+if [[ -z "${secondary}" ]]; then
+  echo "--"
+  echo "--"
+  echo "#a6a696"
+  exit 0
+fi
+
+# If any partition is mounted from this disk, show free space on first mountpoint.
+mp="$(lsblk -nr -o MOUNTPOINT "/dev/${secondary}" | awk 'NF{print; exit}')"
+if [[ -n "${mp}" ]]; then
+  free="$(df -h -P "${mp}" | awk 'NR==2{print $4}')"
+  echo "${free}"
+  echo "${free}"
+  exit 0
+fi
+
+# Disk exists but has no mounted filesystem yet.
+size="$(lsblk -dn -o SIZE "/dev/${secondary}")"
+echo "raw ${size}"
+echo "raw ${size}"
+echo "#a6a696"

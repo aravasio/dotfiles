@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+now="$(date '+%a %d %b %H:%M')"
+notify_timeout="${TIME_NOTIFY_TIMEOUT:-0}"
+
+if [[ -n "${BLOCK_BUTTON:-}" ]]; then
+  cal_text="$(cal -m 2>/dev/null || cal 2>/dev/null || true)"
+  extra="$(date '+Week %V | %Y-%m-%d')"
+  body="${extra}"$'\n\n'"${cal_text}"
+  if command -v dunstify >/dev/null 2>&1; then
+    dunstify -a "i3-timeblock" -u normal -t "${notify_timeout}" \
+      -h string:x-dunst-stack-tag:calendar "Calendar" "${body}" >/dev/null 2>&1 || true
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send -a "i3-timeblock" -u normal -t "${notify_timeout}" "Calendar" "${body}" >/dev/null 2>&1 || true
+  fi
+fi
+
+echo "${now}"

@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+direction="${1:-next}"
+CYCLE_TIMEOUT_MS=1500
+STATE_FILE="${XDG_RUNTIME_DIR:-/tmp}/i3-smart-switch.state"
+
+tree_json="$(i3-msg -t get_tree)"
+
+current_id="$(
+  jq -r '
+    first(.. | objects | select(.focused == true and .window != null) | .id)
+    // first(.. | objects | select(.focused == true) | .id)
+    // empty
+  ' <<<"$tree_json"
+)"
+
+if [[ -z "${current_id}" ]]; then
+  exit 0
+fi
+
+ids_csv="$(
+  jq -r '
+    def ordered_children:
+      [ .focus[]? as $fid
+      | ((.nodes // []) + (.floating_nodes // []))[]
+      | select(.id == $fid)
+      ];
+
+    def mru_windows:
+      if .window != null then
+        [ .id ]
+      else
+        [ ordered_children[]? | mru_windows[] ]
+      end;
+
+    mru_windows | join(",")
+  ' <<<"$tree_json"
+)"
+
+if [[ -z "${ids_csv}" ]]; then
+  exit 0
+fi
+
+IFS=',' read -r -a ids <<<"$ids_csv"
+n="${#ids[@]}"
+
+if (( n < 2 )); then
+  exit 0
+fi
+
+list_hash="$(printf '%s' "$ids_csv" | sha1sum | awk '{print $1}')"
+now_ms="$(date +%s%3N)"
+
+prev_hash=""
+prev_idx=""
+prev_ts=""
+if [[ -f "$STATE_FILE" ]]; then
+  source "$STATE_FILE" || true
+fi
+
+continue_cycle=0
+if [[ -n "${prev_hash:-}" && -n "${prev_idx:-}" && -n "${prev_ts:-}" ]]; then
+  if [[ "$prev_hash" == "$list_hash" ]] && (( now_ms - prev_ts <= CYCLE_TIMEOUT_MS )); then
+    continue_cycle=1
+  fi
+fi
+
+if (( continue_cycle )); then
+  if [[ "$direction" == "prev" ]]; then
+    idx=$(( (prev_idx - 1 + n) % n ))
+  else
+    idx=$(( (prev_idx + 1) % n ))
+  fi
+  if (( idx == 0 )); then
+    if [[ "$direction" == "prev" ]]; then
+      idx=$((n - 1))
+    else
+      idx=1
+    fi
+  fi
+else
+  if [[ "$direction" == "prev" ]]; then
+    idx=$((n - 1))
+  else
+    idx=1
+  fi
+fi
+
+target_id="${ids[$idx]}"
+i3-msg "[con_id=${target_id}] focus" >/dev/null
+
+cat >"$STATE_FILE" <<EOF
+prev_hash='$list_hash'
+prev_idx=$idx
+prev_ts=$now_ms
+EOF

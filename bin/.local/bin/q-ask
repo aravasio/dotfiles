@@ -1,0 +1,9 @@
+#!/bin/bash
+# q-ask — i3 launcher: rofi → kitty with interactive chat
+#
+# Load OPENROUTER_API_KEY_FOR_FREE_MODELS from .zshrc/.zshrc.local so q-chat
+# can use Ling-3.0-flash free via OpenRouter (with $0 spending-limit key).
+eval "$(grep -h '^export OPENROUTER_API_KEY_FOR_FREE_MODELS=' ~/.zshrc ~/.zshrc.local 2>/dev/null)"
+q=$(rofi -dmenu -p "Q" -theme ~/.config/rofi/rofidmenu.rasi)
+[ -z "$q" ] && exit 1
+kitty --override confirm_os_window_close=0 --class=q -e /home/alitoh/.local/bin/q-chat "$q"

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+current_link="/home/alitoh/.config/kitty/theme.conf"
+
+if [ ! -L "$current_link" ]; then
+  echo "No theme symlink at $current_link" >&2
+  exit 1
+fi
+
+current_target="$(readlink -f "$current_link")"
+kitty @ launch --type=overlay sh -lc "printf 'Current theme: %s\n' \"$(basename "$current_target")\"; read -r -p 'Press Enter to close' _"

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+themes_dir="/home/alitoh/.config/kitty/kitty-themes/themes"
+current_link="/home/alitoh/.config/kitty/theme.conf"
+
+mapfile -t themes < <(rg --files -g '*[mM]onokai*.conf' "$themes_dir" | sort)
+
+if [ "${#themes[@]}" -eq 0 ]; then
+  echo "No Monokai themes found in $themes_dir" >&2
+  exit 1
+fi
+
+current_target=""
+if [ -L "$current_link" ]; then
+  current_target="$(readlink -f "$current_link" || true)"
+fi
+
+idx=0
+for i in "${!themes[@]}"; do
+  if [ "${themes[$i]}" = "$current_target" ]; then
+    idx=$i
+    break
+  fi
+done
+
+next_idx=$(( (idx + 1) % ${#themes[@]} ))
+ln -sfn "${themes[$next_idx]}" "$current_link"
+kitty @ set-colors --all "$current_link"
+
+echo "Theme: $(basename "${themes[$next_idx]}")"

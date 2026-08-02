@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROFILE_DIR="${HOME}/.mozilla/firefox/youtube-app"
+URL="https://www.youtube.com/"
+
+mkdir -p "${PROFILE_DIR}/chrome"
+
+exec /usr/lib/firefox/firefox \
+  --no-remote \
+  --new-instance \
+  --class YouTube \
+  --profile "${PROFILE_DIR}" \
+  --new-window "${URL}"

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prefer real game FPS from recent MangoHud CSV logs.
+now=$(date +%s)
+for d in "${MANGOHUD_LOG_DIR:-}" /tmp/MangoHud /tmp "$HOME"; do
+  [ -n "$d" ] || continue
+  [ -d "$d" ] || continue
+  file=$(ls -1t "$d"/MangoHud*.csv "$d"/mangohud*.csv 2>/dev/null | head -n1 || true)
+  [ -n "${file:-}" ] || continue
+
+  mtime=$(stat -c %Y "$file" 2>/dev/null || echo 0)
+  age=$((now - mtime))
+  [ "$age" -le 20 ] || continue
+
+  line=$(tail -n1 "$file" 2>/dev/null || true)
+  fps=$(printf '%s\n' "$line" | awk -F',' '{gsub(/^[ \t]+|[ \t]+$/, "", $1); print $1}')
+  if [[ "$fps" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%.0f FPS\n' "$fps"
+    exit 0
+  fi
+done
+
+# Fallback: show current display refresh so block is still useful on desktop.
+if command -v xrandr >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
+  hz=$(
+    xrandr --current 2>/dev/null | awk '
+      / connected/ {on=1; next}
+      on && /^[[:space:]]+[0-9]+x[0-9]+/ {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /\*/) {
+            gsub("\\*", "", $i)
+            print $i
+            exit
+          }
+        }
+      }
+    ' || true
+  )
+  if [[ -n "${hz:-}" ]]; then
+    echo "${hz}Hz"
+    exit 0
+  fi
+fi
+
+echo '--'

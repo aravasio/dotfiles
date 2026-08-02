@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# kitty-randtheme — launch a kitty window with a random theme layered on top of
+# the base config. Each new terminal gets its own colors => color-coded tiles.
+#
+# The global ~/.config/kitty/theme.conf symlink is NOT touched: cycling with
+# ctrl+shift+]/[ still works and only affects windows that use the default.
+#
+# Theme pool (first match wins):
+#   1. ~/.config/kitty/theme-pool/*.conf   (curate your own: symlinks are fine)
+#   2. every *[mM]onokai*.conf in the kitty-themes repo (fallback)
+#
+# Any extra args are passed through to kitty, e.g.:
+#   kitty-randtheme --title Logs --hold journalctl -f
+
+set -euo pipefail
+
+pool_dir="$HOME/.config/kitty/theme-pool"
+themes_dir="$HOME/.config/kitty/kitty-themes/themes"
+
+themes=()
+if [[ -d "$pool_dir" ]]; then
+  mapfile -t themes < <(find "$pool_dir" -maxdepth 1 -name '*.conf' | sort)
+fi
+if [[ ${#themes[@]} -eq 0 ]]; then
+  mapfile -t themes < <(find "$themes_dir" -maxdepth 1 -name '*[mM]onokai*.conf' | sort)
+fi
+
+# Nothing found -> behave exactly like plain kitty.
+[[ ${#themes[@]} -eq 0 ]] && exec kitty "$@"
+
+pick="${themes[RANDOM % ${#themes[@]}]}"
+
+# Later --config files override earlier ones, so the random theme only
+# repaints colors; everything else comes from kitty.conf.
+exec kitty --config "$HOME/.config/kitty/kitty.conf" --config "$pick" "$@"

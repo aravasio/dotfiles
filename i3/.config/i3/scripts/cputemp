@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# script to monitor temperatures in waybar/i3blocks e.t.c.
+# example only use `sensors` to find your names to replace `Tdie|Tctl|Package`
+# example output part from sensors:
+# zenpower-pci-00c3
+# Adapter: PCI adapter
+# SVI2_Core:     1.03 V
+# SVI2_SoC:    994.00 mV
+# Tdie:         +53.1°C
+# Tctl:         +53.1°C
+# Tccd1:        +42.5°C
+# Tccd2:        +43.2°C
+
+warn="${T_WARN:-75}"
+crit="${T_CRIT:-85}"
+ok_color="${OK_COLOR:-#ffdc3d}"
+warn_color="${WARN_COLOR:-#ffa41f}"
+crit_color="${CRIT_COLOR:-#ff2d6f}"
+missing_color="${MISSING_COLOR:-#a6a696}"
+
+temp=$(sensors 2>/dev/null \
+  | grep -E 'Tdie|Tctl|Package id 0' \
+  | grep -oP '\+?[0-9]+\.\d+(?=°C)' \
+  | tr -d '+' \
+  | head -n1 || true)
+
+if [[ -z "${temp}" ]]; then
+  echo "--"
+  echo "--"
+  echo "${missing_color}"
+  exit 0
+fi
+
+temp_int="${temp%.*}"
+color="${ok_color}"
+if (( temp_int >= crit )); then
+  color="${crit_color}"
+elif (( temp_int >= warn )); then
+  color="${warn_color}"
+fi
+
+echo "${temp}°C"
+echo "${temp}°C"
+echo "${color}"

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROFILE_DIR="${HOME}/.mozilla/firefox/whatsapp-app"
+URL="https://web.whatsapp.com/"
+
+mkdir -p "${PROFILE_DIR}/chrome"
+
+exec /usr/lib/firefox/firefox \
+  --no-remote \
+  --new-instance \
+  --class WhatsApp \
+  --profile "${PROFILE_DIR}" \
+  --new-window "${URL}"

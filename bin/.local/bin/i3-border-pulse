@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# i3-border-pulse — breathing accent color on the focused window's border.
+# Cycles the Monokai Boosted pink <-> purple hues, ~3s per breath.
+#
+# Usage:  i3-border-pulse        start in background (run again -> stop)
+#
+# Stopping restores the static colors from the THEME BLOCK of the i3 config
+# (no full i3 reload needed). If a theme switch happens while pulsing, the
+# pulse wins until you toggle it off.
+#
+# NOTE: this repaints the focused window's border ~8x/s. Cheap on i3's side,
+# but if picom is already stressed it adds repaint churn — keep it off while
+# running the freeze control group (see ~/.config/theme-forge/STATUS.md).
+
+set -uo pipefail
+
+LOCK="${XDG_RUNTIME_DIR:-/tmp}/i3-border-pulse.pid"
+
+restore() {
+  local cfg="$HOME/.config/i3/config" block fa db wh
+  block=$(awk '/THEME BLOCK START/,/THEME BLOCK END/' "$cfg")
+  fa=$(awk '$1=="set" && $2=="$focusaccent" {print $3}' <<<"$block" | tail -1)
+  db=$(awk '$1=="set" && $2=="$darkblue"   {print $3}' <<<"$block" | head -1)
+  wh=$(awk '$1=="set" && $2=="$white"      {print $3}' <<<"$block" | head -1)
+  if [[ -n "$fa" && -n "$db" && -n "$wh" ]]; then
+    i3-msg "client.focused $fa $db $wh $fa $fa" >/dev/null 2>&1
+  fi
+}
+
+if [[ "${1:-}" == "--worker" ]]; then
+  echo $$ >"$LOCK"
+  trap 'restore; rm -f "$LOCK"' EXIT INT TERM
+
+  # pink #ff6ac1 (255,106,193) <-> purple #ae81ff (174,129,255)
+  steps=6     # frames per hue direction
+  hold=0.12   # seconds per frame
+
+  while true; do
+    for dir in 0 1; do
+      for ((i = 0; i <= steps; i++)); do
+        if ((dir == 0)); then t=$i; else t=$((steps - i)); fi
+        r=$(((255 * (steps - t) + 174 * t) / steps))
+        g=$(((106 * (steps - t) + 129 * t) / steps))
+        b=$(((193 * (steps - t) + 255 * t) / steps))
+        printf -v hex '#%02x%02x%02x' "$r" "$g" "$b"
+        i3-msg "client.focused $hex #16161a #fdfdf0 $hex $hex" >/dev/null 2>&1
+        sleep "$hold"
+      done
+    done
+  done
+fi
+
+# Toggle off.
+if [[ -f "$LOCK" ]] && kill -0 "$(cat "$LOCK")" 2>/dev/null; then
+  kill "$(cat "$LOCK")" 2>/dev/null
+  echo "i3-border-pulse: off"
+  exit 0
+fi
+
+rm -f "$LOCK"
+setsid "$0" --worker >/dev/null 2>&1 &
+echo "i3-border-pulse: on (run again to stop)"

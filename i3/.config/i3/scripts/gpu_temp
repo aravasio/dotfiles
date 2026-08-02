@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+warn="${GPU_T_WARN:-75}"
+crit="${GPU_T_CRIT:-85}"
+ok_color="${OK_COLOR:-#ffdc3d}"
+warn_color="${WARN_COLOR:-#ffa41f}"
+crit_color="${CRIT_COLOR:-#ff2d6f}"
+missing_color="${MISSING_COLOR:-#a6a696}"
+
+notify_integrated() {
+  if [[ -n "${BLOCK_BUTTON:-}" ]]; then
+    notify-send "Integrated graphics active" "You are using your integrated graphics."
+  fi
+}
+
+if command -v nvidia-smi >/dev/null 2>&1; then
+  temp=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -dc '0-9' || true)
+  if [[ -n "${temp}" ]]; then
+    color="${ok_color}"
+    if (( temp >= crit )); then
+      color="${crit_color}"
+    elif (( temp >= warn )); then
+      color="${warn_color}"
+    fi
+    echo "${temp}°C"
+    echo "${temp}°C"
+    echo "${color}"
+    exit 0
+  fi
+fi
+
+notify_integrated
+
+echo "--"
+echo "--"
+echo "${missing_color}"

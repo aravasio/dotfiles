@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+warn_usage="${RAM_U_WARN:-80}"
+crit_usage="${RAM_U_CRIT:-90}"
+warn_temp="${RAM_T_WARN:-55}"
+crit_temp="${RAM_T_CRIT:-70}"
+ok_color="${OK_COLOR:-#ae81ff}"
+warn_color="${WARN_COLOR:-#ffa41f}"
+crit_color="${CRIT_COLOR:-#ff2d6f}"
+missing_color="${MISSING_COLOR:-#a6a696}"
+
+notify() {
+  if command -v dunstify >/dev/null 2>&1; then
+    dunstify -a "i3-ramblock" -u normal -t 6000 \
+      -h string:x-dunst-stack-tag:ram "RAM Details" "$1" >/dev/null 2>&1 || true
+    return 0
+  fi
+  command -v notify-send >/dev/null 2>&1 || return 0
+  notify-send -a "i3-ramblock" -u normal -t 6000 "RAM Details" "$1" >/dev/null 2>&1 || true
+}
+
+usage="$(
+  awk '
+  /^MemTotal:/ {total=$2}
+  /^MemAvailable:/ {avail=$2}
+  END {
+    if (total > 0) {
+      printf "%.0f", ((total-avail)/total*100)
+    }
+  }' /proc/meminfo
+)"
+
+ram_temp="$(
+  sensors 2>/dev/null | awk '
+  /^spd5118/ {in_spd=1; next}
+  in_spd && /temp1:/ {
+    if (match($0, /\+([0-9]+\.[0-9]+)°C/, m)) {
+      t=m[1]+0
+      if (count == 0 || t > max) max=t
+      count++
+    }
+    in_spd=0
+  }
+  in_spd && /^[^[:space:]][^:]*:/ && $0 !~ /^Adapter:/ {
+    in_spd=0
+  }
+  END {
+    if (count > 0) printf "%.1f", max
+  }'
+)"
+
+if [[ -z "${usage}" ]]; then
+  echo "RAM --"
+  echo "RAM --"
+  echo "${missing_color}"
+  exit 0
+fi
+
+usage_int="${usage}"
+color="${ok_color}"
+if (( usage_int >= crit_usage )); then
+  color="${crit_color}"
+elif (( usage_int >= warn_usage )); then
+  color="${warn_color}"
+fi
+
+if [[ -n "${ram_temp}" ]]; then
+  temp_int="${ram_temp%.*}"
+  if (( temp_int >= crit_temp )); then
+    color="${crit_color}"
+  elif (( temp_int >= warn_temp )) && [[ "${color}" != "${crit_color}" ]]; then
+    color="${warn_color}"
+  fi
+  text="RAM ${usage_int}% (${ram_temp}C)"
+else
+  text="RAM ${usage_int}% (--C)"
+fi
+
+if [[ -n "${BLOCK_BUTTON:-}" ]]; then
+  mem_line="$(
+    awk '
+    /^MemTotal:/ {total=$2}
+    /^MemAvailable:/ {avail=$2}
+    END {
+      used=total-avail
+      printf "Used: %.1f / %.1f GiB", used/1024/1024, total/1024/1024
+    }' /proc/meminfo
+  )"
+  swap_line="$(
+    awk '
+    /^SwapTotal:/ {st=$2}
+    /^SwapFree:/ {sf=$2}
+    END {
+      su=st-sf
+      if (st > 0) printf "Swap: %.1f / %.1f GiB", su/1024/1024, st/1024/1024
+      else printf "Swap: disabled"
+    }' /proc/meminfo
+  )"
+  dimm_temps="$(
+    sensors 2>/dev/null | awk '
+    /^spd5118/ {slot=$1; in_spd=1; next}
+    in_spd && /temp1:/ {
+      if (match($0, /\+([0-9]+\.[0-9]+)°C/, m)) {
+        printf "%s: %sC\n", slot, m[1]
+      }
+      in_spd=0
+    }
+    in_spd && /^[^[:space:]][^:]*:/ && $0 !~ /^Adapter:/ {in_spd=0}
+    '
+  )"
+  top_mem="$(ps -eo pid,comm,rss --sort=-rss | sed -n '2p' | awk '{printf "Top: PID %s %s (%.1f MiB)", $1,$2,$3/1024}' || true)"
+  details="${text}"$'\n'"${mem_line}"$'\n'"${swap_line}"
+  [[ -n "${top_mem}" ]] && details+=$'\n'"${top_mem}"
+  [[ -n "${dimm_temps}" ]] && details+=$'\n\n'"${dimm_temps}"
+  notify "${details}"
+fi
+
+echo "${text}"
+echo "${text}"
+echo "${color}"

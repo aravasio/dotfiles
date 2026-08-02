@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Connect Sony WH-1000XM5 (paired already)
+bluetoothctl <<'BT'
+power on
+connect AC:80:0A:1C:F0:78
+BT

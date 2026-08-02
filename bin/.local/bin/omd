@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage: omd <file.md>" >&2
+    exit 1
+fi
+
+file="$(realpath "$1")"
+
+kitty --class "MarkdownViewer" --title "$(basename "$file")" \
+    zsh -lc "glow -p \"$file\"" >/dev/null 2>&1 &

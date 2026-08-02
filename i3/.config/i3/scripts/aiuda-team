@@ -1,0 +1,28 @@
+#!/bin/bash
+# i3blocks: AIuda team cheat sheet on click
+
+if [ "$BLOCK_BUTTON" = "1" ]; then
+  F="$HOME/.config/aiuda/team.json"
+  [ -f "$F" ] || { notify-send -t 3000 AIuda "no team file"; exit 0; }
+
+  BODY=$(python3 -c "
+import os, json
+d = json.load(open(os.environ['HOME'] + '/.config/aiuda/team.json'))
+parts = []
+for m in d.get('models', []):
+    parts.append('<span color=\"#a6f024\"><b>' + m['name'] + '</b></span>')
+    parts.append('<span color=\"#d8d8c8\">' + m['purpose'] + '</span>')
+    parts.append('')
+parts.append('<span color=\"#48b8ff\"><b>catalog commands</b></span>')
+parts.append('<span color=\"#a6a696\">discover     models that fit your machine</span>')
+parts.append('<span color=\"#a6a696\">team         this cheat sheet</span>')
+parts.append('<span color=\"#a6a696\">fit &lt;url&gt;    check if one model fits</span>')
+parts.append('<span color=\"#a6a696\">query &lt;url&gt;  explain a model</span>')
+print('\n'.join(parts).strip())
+")
+
+  notify-send -t 8000 -u low "🧠  AIuda Team" "$BODY" &
+fi
+
+echo "🧠"
+echo "🧠"

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+log_file="${XDG_RUNTIME_DIR:-/tmp}/i3-screenshot.log"
+
+{
+  pics_dir="$(xdg-user-dir PICTURES 2>/dev/null || printf '%s/Pictures' "$HOME")"
+  out_dir="${pics_dir}/Screenshots"
+  mkdir -p "$out_dir"
+
+  out_file="${out_dir}/$(date +%Y-%m-%d-%H%M%S)-active.png"
+  if scrot -u "$out_file"; then
+    if command -v notify-send >/dev/null 2>&1; then
+      notify-send "Active window screenshot saved" "$out_file"
+    fi
+    printf 'OK_ACTIVE %s\n' "$out_file"
+  else
+    rc=$?
+    printf 'ERR_ACTIVE rc=%s\n' "$rc"
+    exit "$rc"
+  fi
+} >>"$log_file" 2>&1

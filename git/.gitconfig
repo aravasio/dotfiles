@@ -1,0 +1,134 @@
+# git — Monokai Boosted
+# NOTE: no [user] section here on purpose. Set your identity with:
+#   git config --global user.name  "Your Name"
+#   git config --global user.email "you@example.com"
+
+[core]
+	# delta when available, plain less otherwise (so git never breaks)
+	pager = if command -v delta >/dev/null 2>&1; then delta; else less -R; fi
+	editor = nvim
+	excludesfile = ~/.gitignore_global
+
+[interactive]
+	diffFilter = if command -v delta >/dev/null 2>&1; then delta --color-only; else cat; fi
+
+[delta]
+	features = monokai-boosted
+	navigate = true          # n / N to jump between files
+	line-numbers = true
+	side-by-side = true
+	hyperlinks = true
+	syntax-theme = Monokai Extended
+	true-color = always
+	max-line-length = 2048
+	tabs = 2
+
+[delta "monokai-boosted"]
+	minus-style                   = syntax "#3a1622"
+	minus-emph-style              = normal "#6b1f36"
+	minus-non-emph-style          = syntax "#2b1119"
+	plus-style                    = syntax "#1e3312"
+	plus-emph-style               = normal "#345c1d"
+	plus-non-emph-style           = syntax "#16240d"
+	line-numbers-minus-style      = "#ff2d6f"
+	line-numbers-plus-style       = "#a6f024"
+	line-numbers-zero-style       = "#3d3f3a"
+	line-numbers-left-style       = "#3d3f3a"
+	line-numbers-right-style      = "#3d3f3a"
+	file-style                    = bold "#ff6ac1"
+	file-decoration-style         = "#ff6ac1" ul
+	hunk-header-style             = line-number syntax bold
+	hunk-header-decoration-style  = "#ae81ff" box
+	blame-palette                 = "#16161a #1d1d22 #232526 #2b2b30"
+	commit-decoration-style       = bold box ul "#ffdc3d"
+	whitespace-error-style        = "#16161a" "#ff2d6f"
+	zero-style                    = syntax
+
+[diff]
+	colorMoved = default
+	algorithm = histogram
+	renames = copies
+	mnemonicPrefix = true
+
+[merge]
+	conflictstyle = zdiff3
+	tool = nvimdiff
+
+[color]
+	ui = auto
+
+[color "status"]
+	added = "#a6f024" bold
+	changed = "#ffa41f" bold
+	untracked = "#ff2d6f"
+	branch = "#ff6ac1" bold
+	header = "#6f6b57"
+
+[color "branch"]
+	current = "#a6f024" bold
+	local = "#d8d8c8"
+	remote = "#ae81ff"
+	upstream = "#46d9f0"
+
+[color "diff"]
+	meta = "#ff6ac1" bold
+	frag = "#ae81ff" bold
+	func = "#46d9f0"
+	old = "#ff2d6f"
+	new = "#a6f024"
+	commit = "#ffdc3d" bold
+	whitespace = reverse "#ff2d6f"
+
+[color "decorate"]
+	branch = "#a6f024" bold
+	remoteBranch = "#ae81ff"
+	tag = "#ffdc3d" bold
+	stash = "#46d9f0"
+	HEAD = "#ff6ac1" bold
+
+[pretty]
+	fancy = "%C(bold #ff6ac1)%h%C(reset) %C(#6f6b57)%ad%C(reset) %C(#a6f024)%an%C(reset)%C(auto)%d%C(reset) %s"
+
+[alias]
+	st = status -sb
+	graph = log --graph --pretty=fancy --date=short --all
+	last = log -1 --stat
+	unstage = reset HEAD --
+	undo = reset --soft HEAD~1
+	amend = commit --amend --no-edit
+	wip = !git add -A && git commit -m 'wip'
+	cleanup = !git branch --merged | grep -v '\\*\\|main\\|master\\|develop' | xargs -r git branch -d
+	contributors = shortlog -sn --no-merges
+	today = log --since=midnight --author-date-order --pretty=fancy
+	sync = !git pull --rebase && git push
+
+[init]
+	defaultBranch = main
+
+[pull]
+	rebase = true
+
+[push]
+	default = current
+	autoSetupRemote = true
+	followTags = true
+
+[fetch]
+	prune = true
+	prunetags = true
+
+[rebase]
+	autosquash = true
+	autostash = true
+
+[rerere]
+	enabled = true
+
+[branch]
+	sort = -committerdate
+
+[log]
+	date = relative
+
+[help]
+	autocorrect = prompt

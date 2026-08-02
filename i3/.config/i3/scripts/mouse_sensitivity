@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OK_COLOR="${OK_COLOR:-#8be9fd}"
+ERR_COLOR="${ERR_COLOR:-#ff2d6f}"
+ICON="${ICON:-󰍽}"
+STEP="${STEP:-0.10}"
+LOG_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/i3-mouse-sensitivity.log"
+
+log_debug() {
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$LOG_FILE" 2>/dev/null || true
+}
+
+emit_error() {
+    local text="${1:-n/a}"
+    echo "${ICON} ${text}"
+    echo "${ICON} ${text}"
+    echo "${ERR_COLOR}"
+    exit 0
+}
+
+list_candidate_devices() {
+    xinput list --short 2>/dev/null | awk '
+        /slave[[:space:]]+pointer/ &&
+        $0 !~ /Virtual core/ &&
+        $0 !~ /XTEST/ &&
+        $0 !~ /Consumer Control/ {
+            if (match($0, /id=[0-9]+/)) {
+                print substr($0, RSTART + 3, RLENGTH - 3) "\t" $0
+            }
+        }
+    '
+}
+
+get_speed() {
+    local id="$1"
+    xinput list-props "$id" 2>/dev/null | awk -F':\t' '/libinput Accel Speed \(/ {print $2; exit}'
+}
+
+set_speed() {
+    local id="$1"
+    local value="$2"
+    xinput --set-prop "$id" "libinput Accel Speed" "$value" >/dev/null 2>&1
+}
+
+pick_display_device() {
+    awk -F'\t' '
+        BEGIN { fallback=""; picked=0 }
+        {
+            id=$1
+            line=$2
+            if (fallback == "") fallback=id
+            if (line ~ /Mouse|Trackball|Logitech|Razer|SteelSeries|Corsair|G Pro|MX/) {
+                print id
+                picked=1
+                exit
+            }
+        }
+        END {
+            if (!picked && fallback != "") print fallback
+        }
+    '
+}
+
+set_speed_all() {
+    local value="$1"
+    local changed=0
+    while IFS=$'\t' read -r id _line; do
+        [[ -z "${id:-}" ]] && continue
+        if get_speed "$id" >/dev/null 2>&1; then
+            if set_speed "$id" "$value"; then
+                changed=1
+            fi
+        fi
+    done < <(list_candidate_devices)
+    return $((changed == 0))
+}
+
+open_slider() {
+    local current="$1"
+    local pct
+    local out
+
+    pct="$(awk -v s="$current" 'BEGIN { printf "%.0f", s * 100 }')"
+
+    if command -v yad >/dev/null 2>&1; then
+        out="$(
+            yad --title="Mouse Sensitivity" \
+                --text="Adjust pointer speed (-1 slow, 1 fast)" \
+                --width=420 \
+                --center \
+                --scale \
+                --min-value=-100 \
+                --max-value=100 \
+                --step=1 \
+                --value="$pct" \
+                --button=Cancel:1 \
+                --button=Apply:0 2>/dev/null || true
+        )"
+    elif command -v zenity >/dev/null 2>&1; then
+        out="$(
+            zenity --scale \
+                --title="Mouse Sensitivity" \
+                --text="Adjust pointer speed (-1 slow, 1 fast)" \
+                --min-value=-100 \
+                --max-value=100 \
+                --step=1 \
+                --value="$pct" 2>/dev/null || true
+        )"
+    else
+        return 0
+    fi
+
+    [[ -z "${out:-}" ]] && return 0
+    awk -v p="$out" 'BEGIN { printf "%.2f", p / 100 }'
+}
+
+device_id="$(list_candidate_devices | pick_display_device || true)"
+if [[ -z "${device_id}" ]]; then
+    if [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+        log_debug "wayland session detected; xinput path unavailable"
+        emit_error "wayland"
+    fi
+    log_debug "no pointer device found by xinput; DISPLAY=${DISPLAY:-unset}"
+    emit_error "n/a"
+fi
+
+current_speed="$(get_speed "$device_id" || true)"
+if [[ -z "${current_speed}" ]]; then
+    if [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+        log_debug "device $device_id has no libinput accel speed on wayland session"
+        emit_error "wayland"
+    fi
+    log_debug "device $device_id has no libinput Accel Speed; check xinput list-props output"
+    emit_error "n/a"
+fi
+
+case "${BLOCK_BUTTON:-}" in
+    1)
+        new_speed="$(open_slider "$current_speed" || true)"
+        if [[ -n "${new_speed:-}" ]]; then
+            if ! set_speed_all "$new_speed"; then
+                log_debug "failed to set speed from slider value=$new_speed on any device"
+            fi
+            current_speed="$(get_speed "$device_id" || true)"
+        fi
+        ;;
+    4)
+        new_speed="$(awk -v s="$current_speed" -v step="$STEP" 'BEGIN { n=s+step; if (n>1) n=1; printf "%.2f", n }')"
+        if ! set_speed_all "$new_speed"; then
+            log_debug "failed to increase speed value=$new_speed on any device"
+        fi
+        current_speed="$(get_speed "$device_id" || true)"
+        ;;
+    5)
+        new_speed="$(awk -v s="$current_speed" -v step="$STEP" 'BEGIN { n=s-step; if (n<-1) n=-1; printf "%.2f", n }')"
+        if ! set_speed_all "$new_speed"; then
+            log_debug "failed to decrease speed value=$new_speed on any device"
+        fi
+        current_speed="$(get_speed "$device_id" || true)"
+        ;;
+esac
+
+if [[ -z "${current_speed:-}" ]]; then
+    log_debug "current_speed empty after update; display device id=$device_id"
+    emit_error "n/a"
+fi
+
+display_speed="$(awk -v s="$current_speed" 'BEGIN { printf "%.2f", s }')"
+echo "${ICON} ${display_speed}"
+echo "${ICON} ${display_speed}"
+echo "${OK_COLOR}"

@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""q-chat — interactive LLM chat.
+Usage: q-chat "question"     # start with a question
+       q-chat                # prompt for first question
+
+Normal mode: after each answer, press Enter to continue or type a new question.
+Long answers are shown in less (vim keys j/k, q to close).
+"""
+import os, sys, json, re, subprocess
+from pathlib import Path
+
+R='\033[0m'; B='\033[1m'; D='\033[2m'; I='\033[3m'
+PINK='\033[38;2;255;106;193m';  GRN='\033[38;2;166;240;36m'
+PUR='\033[38;2;174;129;255m';  BLU='\033[38;2;72;184;255m'
+CYN='\033[38;2;70;217;240m';   ORG='\033[38;2;255;164;31m'
+YEL='\033[38;2;255;220;61m';   RED='\033[38;2;255;45;111m'
+
+MODE = os.environ.get('Q_MODE', 'openrouter')  # openrouter | ollama
+MODEL = os.environ.get('Q_MODEL', 'inclusionai/ling-3.0-flash:free')
+FALLBACK_MODEL = 'qwen3:8b'
+OLLAMA = 'http://localhost:11434/api/chat'
+OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions'
+OR_KEY = os.environ.get('OPENROUTER_API_KEY_FOR_FREE_MODELS', '')
+_OR_FAILED = False
+
+def inline(s):
+    s = re.sub(r'\*\*(.+?)\*\*', lambda m: f'{B}{YEL}{m[1]}{R}', s)
+    s = re.sub(r'__(.+?)__',     lambda m: f'{B}{YEL}{m[1]}{R}', s)
+    s = re.sub(r'\*(.+?)\*',     lambda m: f'{I}{BLU}{m[1]}{R}', s)
+    s = re.sub(r'_(.+?)_',       lambda m: f'{I}{BLU}{m[1]}{R}', s)
+    s = re.sub(r'`(.+?)`',       lambda m: f'{GRN}{m[1]}{R}', s)
+    s = re.sub(r'~~(.+?)~~',     lambda m: f'{D}{m[1]}{R}', s)
+    return s
+
+def code_block(lang, code):
+    try:
+        if lang:
+            r = subprocess.run(['bat', f'--language={lang}', '--theme=Monokai Extended',
+                '--style=plain', '--color=always'], input=code,
+                capture_output=True, text=True, timeout=30)
+            if r.returncode == 0: return r.stdout
+    except: pass
+    return '\n'.join(f'  {l}' for l in code.splitlines()) + '\n'
+
+def render_md(text):
+    out = []; i = 0; lines = text.splitlines()
+    while i < len(lines):
+        l = lines[i]
+        m = re.match(r'^(`{3,}|~{3,})(\w*)', l)
+        if m:
+            fence, lang = m[1], m[2]; code = []; i += 1
+            while i < len(lines) and not lines[i].startswith(fence):
+                code.append(lines[i]); i += 1
+            i += 1; out.append(code_block(lang, '\n'.join(code))); continue
+        m = re.match(r'^(#{1,6})\s+(.+)', l)
+        if m:
+            level, txt = len(m[1]), inline(m[2])
+            if level == 1: out.append(f'{PINK}{B}{txt}{R}')
+            elif level == 2: out.append(f'{PUR}{B}{txt}{R}')
+            else: out.append(f'{ORG}{B}{txt}{R}')
+            i += 1; continue
+        if re.match(r'^(-{3,}|\*{3,}|_{3,})$', l):
+            out.append(f'{PUR}{"-"*40}{R}'); i += 1; continue
+        if l.startswith('> '):
+            out.append(f'{CYN}│ {inline(l[2:])}{R}'); i += 1; continue
+        if l.startswith('>'):
+            out.append(f'{CYN}│ {inline(l[1:])}{R}'); i += 1; continue
+        m = re.match(r'^(\s*)([-*+])\s+(.+)', l)
+        if m:
+            out.append(f'  {m[1]}{ORG}{m[2]}{R} {inline(m[3])}'); i += 1; continue
+        m = re.match(r'^(\s*)(\d+)\.\s+(.+)', l)
+        if m:
+            out.append(f'  {m[1]}{ORG}{m[2]}.{R} {inline(m[3])}'); i += 1; continue
+        out.append(inline(l)); i += 1
+    return '\n'.join(out)
+
+def build_context():
+    binds = os.popen('grep -c bindsym ~/.config/i3/config').read().strip() or '?'
+    d = f'alitoh@endeavouros (Arch Linux)\nKernel: {os.uname().release}\nWM: i3 ({binds} binds)\nTerminal: kitty  Shell: zsh'
+    try:
+        p = Path.home() / '.config/machine-facts/AGENTS.md'
+        s = p.read_text()[:4000] if p.exists() else ''
+    except: s = ''
+    return f'Help alitoh with Linux/system questions. Concise, max 3 paragraphs. Include exact commands.\n\nSystem:\n{d}\n\nDetails:\n{s}'
+
+def query(q, msgs):
+    global _OR_FAILED
+    msgs.append({'role':'user','content':q})
+    if MODE == 'openrouter' and not _OR_FAILED:
+        payload = json.dumps({'model':MODEL,'messages':msgs,'max_tokens':32768})
+        resp = subprocess.run(['curl','-s','-w','\n%{http_code}','--max-time','120',OPENROUTER,
+            '-H','Content-Type: application/json',
+            '-H','Authorization: Bearer '+OR_KEY,
+            '-d',payload], capture_output=True,text=True,timeout=130)
+        parts = resp.stdout.strip().rsplit('\n', 1)
+        body, code = (parts[0], parts[1]) if len(parts) == 2 else (resp.stdout, '000')
+        try:
+            d = json.loads(body)
+            a = d.get('choices',[{}])[0].get('message',{}).get('content','')
+            if a and code.startswith('2'):
+                msgs.append({'role':'assistant','content':a})
+                return a
+        except: pass
+        _OR_FAILED = True
+        sys.stderr.write(f'\n{RED}{B}⚠ OpenRouter free model failed (HTTP {code}).{R}\n')
+        sys.stderr.write(f'{ORG}Falling back to ollama ({FALLBACK_MODEL}).{R}\n')
+        sys.stderr.write(f'  Set Q_MODE=ollama or Q_MODEL to silence.\n\n')
+    payload = json.dumps({'model':FALLBACK_MODEL if MODE == 'openrouter' else MODEL,'messages':msgs,'stream':False})
+    resp = subprocess.run(['curl','-s','--max-time','120',OLLAMA,
+        '-H','Content-Type: application/json','-d',payload],
+        capture_output=True,text=True,timeout=130)
+    try:
+        d = json.loads(resp.stdout)
+        a = d.get('message',{}).get('content','')
+        if not a: a = f'Error: {d.get("error","no response")}'
+    except: a = 'Error: parse failure'
+    msgs.append({'role':'assistant','content':a})
+    return a
+
+def chat(first=None):
+    ctx = build_context()
+    msgs = [{'role':'system','content':ctx}]
+    q = first
+    while True:
+        if q is None:
+            sys.stdout.write(f'{ORG}Q:{R} ')
+            sys.stdout.flush()
+            try: q = sys.stdin.readline()
+            except: break
+            if not q or not q.strip(): break
+            q = q.strip()
+        query(q, msgs)
+        q = None
+        # render last exchange and page through less
+        last = msgs[-1]['content']
+        fmt = f'{B}{PINK}▶{R} ' + render_md(last)
+        pager = subprocess.Popen(['less','-R','-X'], stdin=subprocess.PIPE)
+        pager.stdin.write(fmt.encode())
+        pager.stdin.close()
+        pager.wait()
+
+if __name__ == '__main__':
+    chat(sys.argv[1] if len(sys.argv) > 1 else None)

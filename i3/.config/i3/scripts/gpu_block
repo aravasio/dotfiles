@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+warn_usage="${GPU_U_WARN:-80}"
+crit_usage="${GPU_U_CRIT:-95}"
+warn_temp="${GPU_T_WARN:-75}"
+crit_temp="${GPU_T_CRIT:-85}"
+ok_color="${OK_COLOR:-#48b8ff}"
+warn_color="${WARN_COLOR:-#ffa41f}"
+crit_color="${CRIT_COLOR:-#ff2d6f}"
+missing_color="${MISSING_COLOR:-#a6a696}"
+
+usage=""
+temp=""
+vendor="unknown"
+
+notify() {
+  if command -v dunstify >/dev/null 2>&1; then
+    dunstify -a "i3-gpublock" -u normal -t 6000 \
+      -h string:x-dunst-stack-tag:gpu "GPU Details" "$1" >/dev/null 2>&1 || true
+    return 0
+  fi
+  command -v notify-send >/dev/null 2>&1 || return 0
+  notify-send -a "i3-gpublock" -u normal -t 6000 "GPU Details" "$1" >/dev/null 2>&1 || true
+}
+
+if command -v nvidia-smi >/dev/null 2>&1; then
+  vendor="nvidia"
+  usage="$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -dc '0-9' || true)"
+  temp="$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -dc '0-9' || true)"
+fi
+
+if [[ -z "${usage}" ]]; then
+  vendor="amd"
+  usage="$(for f in /sys/class/drm/card*/device/gpu_busy_percent; do [ -r "$f" ] && cat "$f" && break; done 2>/dev/null | tr -dc '0-9' || true)"
+fi
+
+if [[ -z "${temp}" ]]; then
+  temp="$(
+    sensors 2>/dev/null | awk '
+    /^amdgpu-/ {in_gpu=1; next}
+    in_gpu && /^$/ {in_gpu=0}
+    in_gpu && /edge:/ {
+      if (match($0, /\+([0-9]+\.[0-9]+)°C/, m)) {
+        print m[1]
+        exit
+      }
+    }
+    ' || true
+  )"
+fi
+
+if [[ -z "${usage}" && -z "${temp}" ]]; then
+  echo "GPU --"
+  echo "GPU --"
+  echo "${missing_color}"
+  exit 0
+fi
+
+if [[ -z "${usage}" ]]; then
+  usage="--"
+fi
+
+if [[ -z "${temp}" ]]; then
+  text="GPU ${usage}% (--C)"
+  echo "${text}"
+  echo "${text}"
+  echo "${missing_color}"
+  exit 0
+fi
+
+usage_int=0
+if [[ "${usage}" =~ ^[0-9]+$ ]]; then
+  usage_int="${usage}"
+fi
+
+temp_num="${temp%.*}"
+color="${ok_color}"
+if (( usage_int >= crit_usage || temp_num >= crit_temp )); then
+  color="${crit_color}"
+elif (( usage_int >= warn_usage || temp_num >= warn_temp )); then
+  color="${warn_color}"
+fi
+
+text="GPU ${usage_int}% (${temp}C)"
+
+if [[ -n "${BLOCK_BUTTON:-}" ]]; then
+  details="${text}"
+  if [[ "${vendor}" == "nvidia" ]] && command -v nvidia-smi >/dev/null 2>&1; then
+    extra="$(nvidia-smi --query-gpu=name,memory.used,memory.total,power.draw,clocks.gr,fan.speed --format=csv,noheader,nounits 2>/dev/null | head -n1 || true)"
+    if [[ -n "${extra}" ]]; then
+      IFS=',' read -r name mem_used mem_total power clocks fan <<< "${extra}"
+      details+=$'\n'"$(printf "Model: %s" "${name:-NVIDIA}")"
+      details+=$'\n'"$(printf "VRAM: %s / %s MiB" "${mem_used// /}" "${mem_total// /}")"
+      details+=$'\n'"$(printf "Power: %s W  Clock: %s MHz  Fan: %s%%" "${power// /}" "${clocks// /}" "${fan// /}")"
+    fi
+  else
+    amdgpu_extra="$(
+      sensors 2>/dev/null | awk '
+      /^amdgpu-/ {in_gpu=1; next}
+      in_gpu && /^$/ {in_gpu=0}
+      in_gpu && /edge:/ {if (match($0, /\+([0-9]+\.[0-9]+)°C/, m)) edge=m[1]}
+      in_gpu && /sclk:/ {clk=$2}
+      in_gpu && /PPT:/  {ppt=$2 " " $3}
+      END {
+        if (edge != "") printf "Temp: %sC\n", edge
+        if (clk != "") printf "Clock: %s MHz\n", clk
+        if (ppt != "") printf "Power: %s\n", ppt
+      }'
+    )"
+    [[ -n "${amdgpu_extra}" ]] && details+=$'\n'"${amdgpu_extra}"
+  fi
+  notify "${details}"
+fi
+
+echo "${text}"
+echo "${text}"
+echo "${color}"

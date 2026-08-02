@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""Generate a Monokai Boosted aurora wallpaper.
+
+The trick: paint a handful of blurred color blobs on a tiny canvas, then scale
+it up. Upscaling a blurred small image gives perfectly smooth mesh gradients
+with no banding and no math.
+
+Usage:
+    gen-wallpaper                       # 3440x1440, default seed
+    gen-wallpaper --seed 7              # different blob arrangement
+    gen-wallpaper --size 2560x1440 --out ~/Pictures/wallpapers/other.png
+"""
+
+import argparse
+import os
+import random
+
+from PIL import Image, ImageDraw, ImageFilter, ImageChops
+
+PALETTE = [
+    (255, 106, 193),   # pink
+    (174, 129, 255),   # purple
+    (72, 184, 255),    # blue
+    (70, 217, 240),    # cyan
+    (166, 240, 36),    # green  (used sparingly — it's the loudest)
+    (255, 164, 31),    # orange
+]
+BASE_TOP = (18, 18, 22)
+BASE_BOTTOM = (22, 22, 26)
+
+SMALL = (172, 72)      # working canvas; upscaled to the final size
+
+
+def vertical_gradient(size, top, bottom):
+    img = Image.new("RGB", size)
+    d = ImageDraw.Draw(img)
+    h = size[1]
+    for y in range(h):
+        t = y / max(h - 1, 1)
+        d.line(
+            [(0, y), (size[0], y)],
+            fill=tuple(round(a + (b - a) * t) for a, b in zip(top, bottom)),
+        )
+    return img
+
+
+def vignette(size, strength=0.75):
+    """Radial falloff mask: bright in the middle, dark at the corners."""
+    w, h = size
+    mask = Image.new("L", (w, h), 0)
+    d = ImageDraw.Draw(mask)
+    # An oversized ellipse, then blur — corners land well below center.
+    d.ellipse([-w * 0.15, -h * 0.35, w * 1.15, h * 1.35], fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=min(w, h) / 4))
+    floor = round(255 * (1 - strength))
+    return mask.point(lambda v: floor + v * (255 - floor) // 255)
+
+
+def aurora(seed):
+    """Additive blobs over a near-black base: blacks stay black, colors stay hot."""
+    rng = random.Random(seed)
+    w, h = SMALL
+    base = vertical_gradient(SMALL, BASE_TOP, BASE_BOTTOM)
+
+    glow = Image.new("RGB", SMALL, (0, 0, 0))
+    # Pink and purple carry the image; green is a single sharp accent.
+    weights = [5, 5, 4, 3, 1, 2]
+    for _ in range(5):
+        color = rng.choices(PALETTE, weights=weights, k=1)[0]
+        blob = Image.new("RGB", SMALL, (0, 0, 0))
+        d = ImageDraw.Draw(blob)
+        cx = rng.uniform(0.05, 0.95) * w
+        cy = rng.uniform(0.0, 1.0) * h
+        rx = rng.uniform(0.14, 0.30) * w
+        ry = rng.uniform(0.18, 0.40) * h
+        d.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=color)
+        blob = blob.filter(ImageFilter.GaussianBlur(radius=rng.uniform(8, 14)))
+        # Dim each blob hard before adding, so overlaps glow instead of blowing out.
+        k = rng.uniform(0.22, 0.34)
+        blob = blob.point(lambda v, k=k: int(v * k))
+        glow = ImageChops.add(glow, blob)
+
+    # Push the glow into the corners-are-dark shape before compositing.
+    glow.putalpha(vignette(SMALL, strength=0.8))
+    glow = Image.alpha_composite(
+        Image.new("RGBA", SMALL, (0, 0, 0, 255)), glow).convert("RGB")
+
+    return ImageChops.add(base, glow)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--size", default="3440x1440")
+    ap.add_argument("--seed", type=int, default=11)
+    ap.add_argument("--out", default=os.path.expanduser(
+        "~/Pictures/wallpapers/monokai-boosted-aurora.png"))
+    ap.add_argument("--grain", type=float, default=0.045,
+                    help="film grain amount, 0 disables")
+    args = ap.parse_args()
+
+    w, h = (int(v) for v in args.size.lower().split("x"))
+
+    img = aurora(args.seed).resize((w, h), Image.BICUBIC)
+    img = img.filter(ImageFilter.GaussianBlur(radius=max(w, h) / 400))
+
+    if args.grain > 0:
+        noise = Image.effect_noise((w, h), 22).convert("L")
+        img = Image.blend(img, Image.merge("RGB", (noise, noise, noise)),
+                          args.grain)
+
+    out = os.path.abspath(os.path.expanduser(args.out))
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    img.save(out, optimize=True)
+    print(out)
+
+
+if __name__ == "__main__":
+    main()

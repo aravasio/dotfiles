@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+class_name="I3Cheatsheet"
+title="Cheatsheet"
+render_script="$HOME/.config/i3/scripts/render-cheatsheet"
+
+tree="$(i3-msg -t get_tree)"
+
+visible="$(printf '%s' "$tree" | jq -r --arg class "$class_name" '
+  first(
+    recurse(.nodes[]?, .floating_nodes[]?)
+    | select(.window_properties.class? == $class)
+    | .visible
+  ) // empty
+')"
+
+exists="$(printf '%s' "$tree" | jq -r --arg class "$class_name" '
+  first(
+    recurse(.nodes[]?, .floating_nodes[]?)
+    | select(.window_properties.class? == $class)
+    | .id
+  ) // empty
+')"
+
+if [[ "$visible" == "true" ]]; then
+    i3-msg "[class=\"$class_name\"] move scratchpad" >/dev/null
+    exit 0
+fi
+
+if [[ -n "$exists" ]]; then
+    i3-msg "[class=\"$class_name\"] scratchpad show, move position center, focus" >/dev/null
+    exit 0
+fi
+
+kitty --class "$class_name" --title "$title" \
+    zsh -lc "\"$render_script\" | less -R" >/dev/null 2>&1 &
+
+for _ in $(seq 1 20); do
+    sleep 0.1
+    if i3-msg -t get_tree | jq -e --arg class "$class_name" '
+        first(
+          recurse(.nodes[]?, .floating_nodes[]?)
+          | select(.window_properties.class? == $class)
+          | .id
+        ) != null
+    ' >/dev/null; then
+        i3-msg "[class=\"$class_name\"] scratchpad show, move position center, focus" >/dev/null
+        exit 0
+    fi
+done

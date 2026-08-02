@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import math
+import shutil
+import re
+import textwrap
+from pathlib import Path
+
+CONFIG = Path.home() / ".config/i3/config"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+CYAN = "\033[38;5;81m"
+GREEN = "\033[38;5;114m"
+YELLOW = "\033[38;5;221m"
+MAGENTA = "\033[38;5;213m"
+BLUE = "\033[38;5;117m"
+
+
+def join_continued_lines(text: str) -> list[str]:
+    lines = text.splitlines()
+    merged: list[str] = []
+    current = ""
+    for raw in lines:
+        line = raw.rstrip()
+        if current:
+            current += " " + line.lstrip()
+        else:
+            current = line
+        if current.endswith("\\"):
+            current = current[:-1].rstrip()
+            continue
+        merged.append(current)
+        current = ""
+    if current:
+        merged.append(current)
+    return merged
+
+
+def normalize_key(key: str) -> str:
+    key = key.replace("$mod", "Mod")
+    key = key.replace("Control", "Ctrl")
+    key = key.replace("Mod1", "Alt")
+    return key
+
+
+def strip_exec(cmd: str) -> str:
+    cmd = re.sub(r"^exec(?:_always)?\s+", "", cmd)
+    cmd = re.sub(r"^--no-startup-id\s+", "", cmd)
+    return cmd.strip()
+
+
+def describe(command: str) -> str:
+    compact = " ".join(command.split())
+
+    patterns = [
+        (r'^workspace \$ws(\d+)$', lambda m: f"Switch to workspace {m.group(1)}"),
+        (r'^workspace next$', lambda m: "Next workspace"),
+        (r'^workspace prev$', lambda m: "Previous workspace"),
+        (r'^move container to workspace \$ws(\d+)$', lambda m: f"Move focused window to workspace {m.group(1)}"),
+        (r'^mode "resize"$', lambda m: "Enter resize mode"),
+        (r'^kill$', lambda m: "Close focused window"),
+        (r'^reload$', lambda m: "Reload i3 config"),
+        (r'^restart$', lambda m: "Restart i3"),
+        (r'^focus (left|right|up|down)$', lambda m: f"Focus {m.group(1)}"),
+        (r'^move (left|right|up|down)$', lambda m: f"Move focused window {m.group(1)}"),
+        (r'^split h$', lambda m: "Set next split horizontal"),
+        (r'^split v$', lambda m: "Set next split vertical"),
+        (r'^fullscreen toggle$', lambda m: "Toggle fullscreen"),
+        (r'^layout stacking$', lambda m: "Use stacking layout"),
+        (r'^layout tabbed$', lambda m: "Use tabbed layout"),
+        (r'^layout toggle split$', lambda m: "Toggle split layout"),
+        (r'^floating toggle$', lambda m: "Toggle floating mode"),
+        (r'^move scratchpad$', lambda m: "Send focused window to scratchpad"),
+        (r'^scratchpad show$', lambda m: "Show or hide scratchpad window"),
+        (r'^resize grow height .*$', lambda m: "Resize: grow height"),
+        (r'^resize shrink width .*$', lambda m: "Resize: shrink width"),
+        (r'^resize shrink height .*$', lambda m: "Resize: shrink height"),
+        (r'^resize grow width .*$', lambda m: "Resize: grow width"),
+        (r'^mode "default"$', lambda m: "Leave resize mode"),
+        (r'^exec .*empty_workspace$', lambda m: "Create a new empty workspace"),
+        (r'^exec .*blur-lock$', lambda m: "Lock the screen"),
+        (r'^exec .*powermenu$', lambda m: "Open power menu"),
+        (r'^exec .*keyhint-2$', lambda m: "Open searchable keybinding helper"),
+        (r'^exec .*toggle-cheatsheet$', lambda m: "Toggle the i3 cheatsheet window"),
+        (r'^exec .*volume_brightness\.sh brightness_up$', lambda m: "Increase screen brightness"),
+        (r'^exec .*volume_brightness\.sh brightness_down$', lambda m: "Decrease screen brightness"),
+        (r'^exec .*volume_brightness\.sh volume_up$', lambda m: "Increase volume"),
+        (r'^exec .*volume_brightness\.sh volume_down$', lambda m: "Decrease volume"),
+        (r'^exec .*volume_brightness\.sh volume_mute$', lambda m: "Toggle mute"),
+        (r'^exec amixer sset Capture toggle$', lambda m: "Toggle microphone mute"),
+        (r'^exec .*playerctl play-pause$', lambda m: "Play or pause media"),
+        (r'^exec .*playerctl next$', lambda m: "Next track"),
+        (r'^exec .*playerctl previous$', lambda m: "Previous track"),
+        (r'^exec .*audio-device-switch$', lambda m: "Switch audio output device"),
+        (r'^exec .*power-profiles$', lambda m: "Open power profile menu"),
+        (r'^exec .*screenshot-select$', lambda m: "Take area screenshot"),
+        (r'^exec .*screenshot-active$', lambda m: "Take active-window screenshot"),
+        (r'^exec .*/firefox$', lambda m: "Launch Firefox"),
+        (r'^exec .*/thunar$', lambda m: "Launch Thunar"),
+        (r'^exec .*\.local/bin/music$', lambda m: "Launch Music"),
+        (r'^exec .*\.local/bin/whatsapp$', lambda m: "Launch WhatsApp"),
+        (r'^exec .*rofi .* -show drun.*$', lambda m: "Open app launcher"),
+        (r'^exec .*rofi .* -show window.*$', lambda m: "Open window switcher"),
+        (r'^exec .*i3-smart-switch prev$', lambda m: "Previous window switch"),
+        (r'^exec .*i3-smart-switch$', lambda m: "Smart window switch"),
+        (r'^exec .*kitty$', lambda m: "Launch terminal"),
+        (r'^exec .*amixer -D pulse sset Master 1%\+$', lambda m: "Increase volume by 1%"),
+        (r'^exec .*amixer -D pulse sset Master 1%-$', lambda m: "Decrease volume by 1%"),
+    ]
+
+    for pattern, formatter in patterns:
+        match = re.match(pattern, compact)
+        if match:
+            return formatter(match)
+
+    stripped = strip_exec(compact)
+    if stripped != compact:
+        return stripped
+    return compact
+
+
+def group_for(command: str) -> str:
+    cmd = command
+    if "workspace" in cmd:
+        return "Workspaces"
+    if cmd.startswith("resize ") or cmd == 'mode "default"':
+        return "Resize Mode"
+    if any(token in cmd for token in ["focus ", "move ", "split ", "layout ", "fullscreen", "floating", "scratchpad", 'mode "resize"']):
+        return "Windows and Layout"
+    if any(token in cmd for token in ["powermenu", "blur-lock", "reload", "restart"]):
+        return "Session"
+    if any(token in cmd for token in ["Audio", "brightness", "volume", "playerctl", "amixer", "power-profiles", "audio-device-switch"]):
+        return "Media and Hardware"
+    if any(token in cmd for token in ["firefox", "thunar", "music", "rofi", "screenshot", "keyhint", "toggle-cheatsheet"]):
+        return "Launchers and Tools"
+    return "Other"
+
+
+def parse_bindings() -> list[tuple[int, str, str, str]]:
+    bindings: list[tuple[int, str, str, str]] = []
+    for lineno, line in enumerate(join_continued_lines(CONFIG.read_text()), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        if len(parts) < 3 or parts[0] != "bindsym":
+            continue
+        idx = 1
+        flags: list[str] = []
+        while idx < len(parts) and parts[idx].startswith("--"):
+            flags.append(parts[idx])
+            idx += 1
+        if idx >= len(parts) - 1:
+            continue
+        key = normalize_key(parts[idx])
+        if "--release" in flags:
+            key = f"{key} (release)"
+        command = " ".join(parts[idx + 1 :]).strip()
+        bindings.append((lineno, key, describe(command), group_for(command)))
+    return bindings
+
+
+def render_entry(key: str, desc: str, width: int) -> list[str]:
+    key_width = min(28, max(16, width // 3))
+    desc_width = max(20, width - key_width - 2)
+    wrapped = textwrap.wrap(desc, width=desc_width) or [""]
+    key_plain = f"{key:<{key_width}}"
+    desc_plain = wrapped[0].ljust(desc_width)
+    lines = [f"{GREEN}{key_plain}{RESET} {DIM}{desc_plain}{RESET}"]
+    indent = " " * (key_width + 1)
+    for extra in wrapped[1:]:
+        desc_plain = extra.ljust(desc_width)
+        lines.append(f"{indent}{DIM}{desc_plain}{RESET}")
+    return lines
+
+
+def render_section(title: str, items: list[tuple[int, str, str, str]], width: int) -> list[str]:
+    lines = [f"{MAGENTA}{BOLD}{title.upper()}{RESET}", f"{BLUE}{'-' * len(title)}{RESET}"]
+    cols = 2 if width >= 150 and len(items) >= 6 else 1
+    gap = 2
+    cell_width = (width - gap * (cols - 1)) // cols
+    rows = math.ceil(len(items) / cols)
+
+    cells = [render_entry(key, desc, cell_width) for _, key, desc, _ in items]
+    for row in range(rows):
+        row_cells = []
+        max_height = 0
+        for col in range(cols):
+            idx = row + col * rows
+            cell = cells[idx] if idx < len(cells) else [" " * cell_width]
+            row_cells.append(cell)
+            max_height = max(max_height, len(cell))
+        for line_idx in range(max_height):
+            parts = []
+            for cell in row_cells:
+                parts.append(cell[line_idx] if line_idx < len(cell) else " " * cell_width)
+            lines.append((" " * gap).join(parts).rstrip())
+    lines.append("")
+    return lines
+
+
+def main() -> None:
+    bindings = parse_bindings()
+    groups = ["Windows and Layout", "Resize Mode", "Workspaces", "Launchers and Tools", "Media and Hardware", "Session", "Other"]
+    width = min(220, max(100, shutil.get_terminal_size(fallback=(160, 40)).columns - 2))
+
+    output = [
+        f"{CYAN}{BOLD}I3 CHEATSHEET{RESET}",
+        f"{CYAN}{'=' * 13}{RESET}",
+        "",
+        f"{YELLOW}Mod{RESET} = Super / Windows key",
+        f"{YELLOW}Mod+h{RESET} = toggle this cheatsheet",
+        f"{YELLOW}Ctrl+Space{RESET} = toggle floating for the focused window",
+        "",
+    ]
+
+    for group in groups:
+        items = [item for item in bindings if item[3] == group]
+        if not items:
+            continue
+        output.extend(render_section(group, items, width))
+
+    print("\n".join(output).rstrip())
+
+
+if __name__ == "__main__":
+    main()

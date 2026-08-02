@@ -1,0 +1,9 @@
+*.bak
+*.bak.*
+*.bak-*
+__pycache__/
+node_modules/
+package-lock.json
+.DS_Store
+# secrets NEVER belong here — they live in ~/.zshrc.local on each machine
+.zshrc.local

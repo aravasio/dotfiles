@@ -1,0 +1,172 @@
+# customized dunst setup from EndeavourOS i3
+# https://github.com/endeavouros-team/endeavouros-i3wm-setup
+# See dunst(5) for all configuration options
+
+[global]
+    ### Display ###
+    monitor = 0
+
+    follow = none
+
+    ### Geometry ###
+    width = 420
+    
+    # dynamic height from 0 to 400
+    # The maximum height of a single notification, excluding the frame.
+    height = (0, 400)
+
+    # Position the notification in the top right corner
+    origin = top-right
+
+    # Offset from the origin
+    offset = (24, 56)
+
+    # Scale factor. It is auto-detected if value is 0.
+    scale = 0
+    notification_limit = 5
+
+    ### Progress bar ###
+    progress_bar = true
+    progress_bar_height = 8
+    progress_bar_frame_width = 1
+    progress_bar_min_width = 150
+    progress_bar_max_width = 300
+    progress_bar_corner_radius = 4
+    progress_bar_corners = all
+    icon_corner_radius = 6
+    icon_corners = all
+    indicate_hidden = yes
+    transparency = 10
+    separator_height = 1
+    padding = 12
+    horizontal_padding = 14
+    text_icon_padding = 8
+    frame_width = 2
+    frame_color = "#ff6ac1"
+    gap_size = 0
+    separator_color = frame
+    sort = yes
+    idle_threshold = 0
+
+    ### Text ###
+    font = JetBrainsMono Nerd Font 10
+    line_height = 2
+    markup = full
+    format = "<b>%s</b>\n<span foreground='#a6a696'>%b</span>"
+    alignment = left
+    vertical_alignment = center
+    show_age_threshold = 60
+    ellipsize = middle
+    ignore_newline = no
+    stack_duplicates = true
+    hide_duplicate_count = true
+    show_indicators = no
+
+    ### Icons ###
+    icon_position = left
+    min_icon_size = 0
+    max_icon_size = 32
+    icon_path = /usr/share/icons/Qogir/16/status:/usr/share/icons/Qogir/16/devices/:/usr/share/icons/Qogir/24/panel/:/usr/share/icons/Qogir/16/apps/:/usr/share/pixmaps/:/usr/share/icons/Qogir/scalable/apps/
+    
+    ### History ###
+    sticky_history = false
+    history_length = 0
+
+    ### Misc/Advanced ###
+    dmenu = /usr/bin/dmenu -p dunst:
+    browser = /usr/bin/xdg-open
+    always_run_script = true
+    title = Dunst
+    class = Dunst
+    corner_radius = 10
+    corners = all
+    ignore_dbusclose = false
+
+    ### Legacy
+    force_xinerama = false
+
+    ### mouse
+    mouse_left_click = close_current
+    mouse_middle_click = do_action, close_current
+    mouse_right_click = close_all
+
+[experimental]
+    per_monitor_dpi = false
+
+
+[urgency_low]
+    background = "#1d1d22"
+    foreground = "#a6a696"
+    frame_color = "#3d3f3a"
+    timeout = 5
+    icon = /usr/share/icons/Qogir/16/status/package-installed-outdated.svg
+
+[urgency_normal]
+    background = "#16161a"
+    foreground = "#d8d8c8"
+    frame_color = "#ff6ac1"
+    timeout = 5
+    override_pause_level = 30
+    icon = /usr/share/icons/Qogir/16/emblems/emblem-question.svg
+
+[urgency_critical]
+    background = "#2b1119"
+    foreground = "#fdfdf0"
+    frame_color = "#ff2d6f"
+    timeout = 120
+    icon = /usr/share/icons/Qogir/16/actions/dialog-warning.svg
+
+[stack-volumes]
+    appname = "some_volume_notifiers"
+    set_stack_tag = "volume"
+
+[calendar-sticky]
+    appname = "i3-timeblock"
+    timeout = 0
+    set_stack_tag = "calendar"
+    frame_color = "#f8f8f2"
+    icon = /usr/share/icons/Qogir/32/apps/preferences-calendar-and-tasks.svg
+
+[cpu-widget]
+    appname = "i3-cpublock"
+    frame_color = "#48b8ff"
+    set_stack_tag = "cpu"
+    icon = /usr/share/icons/Qogir/32/devices/cpu.svg
+
+[ram-widget]
+    appname = "i3-ramblock"
+    frame_color = "#ae81ff"
+    set_stack_tag = "ram"
+    icon = /usr/share/icons/Qogir/32/devices/drive-multidisk.svg
+
+[gpu-widget]
+    appname = "i3-gpublock"
+    frame_color = "#46d9f0"
+    set_stack_tag = "gpu"
+    icon = /usr/share/icons/Qogir/32/apps/preferences-desktop-display.svg
+
+[net-widget]
+    appname = "i3-netblock"
+    frame_color = "#a6f024"
+    set_stack_tag = "net"
+    icon = /usr/share/icons/Qogir/32/places/default-network.svg
+
+# ── Claude Code ──────────────────────────────────────────────
+# Fired by the hooks in ~/.claude/hooks/notify.sh
+[claude-waiting]
+    appname = "Claude Code"
+    summary = "*needs you*"
+    frame_color = "#ffa41f"
+    background = "#2a1f0f"
+    foreground = "#fdfdf0"
+    timeout = 0
+    set_stack_tag = "claude"
+
+[claude-done]
+    appname = "Claude Code"
+    summary = "*done*"
+    frame_color = "#a6f024"
+    background = "#16161a"
+    foreground = "#d8d8c8"
+    timeout = 6
+    set_stack_tag = "claude"

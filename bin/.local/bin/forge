@@ -1,0 +1,5 @@
+#!/usr/bin/env zsh
+set -euo pipefail
+
+cd /home/alitoh/projects/ember_forge
+PYTHONPATH=. exec python3 -m ember_forge.cli "$@"

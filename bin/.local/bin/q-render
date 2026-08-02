@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""Render markdown with ANSI colors matching Monokai Boosted palette.
+Code blocks use bat for syntax highlighting.
+"""
+import re, subprocess, sys
+
+R = '\033[0m'     # reset
+B = '\033[1m'     # bold
+D = '\033[2m'     # dim
+I = '\033[3m'     # italic
+U = '\033[4m'     # underline
+
+PINK   = '\033[38;2;255;106;193m'
+GREEN  = '\033[38;2;166;240;36m'
+PURPLE = '\033[38;2;174;129;255m'
+BLUE   = '\033[38;2;72;184;255m'
+CYAN   = '\033[38;2;70;217;240m'
+ORANGE = '\033[38;2;255;164;31m'
+YELLOW = '\033[38;2;255;220;61m'
+RED    = '\033[38;2;255;45;111m'
+FG     = '\033[38;2;216;216;200m'
+
+def inline(s):
+    """Apply ANSI to inline elements: bold, code, italic, links, inline-code."""
+    s = re.sub(r'\*\*(.+?)\*\*', lambda m: f'{B}{YELLOW}{m.group(1)}{R}', s)
+    s = re.sub(r'__(.+?)__',     lambda m: f'{B}{YELLOW}{m.group(1)}{R}', s)
+    s = re.sub(r'\*(.+?)\*',     lambda m: f'{I}{BLUE}{m.group(1)}{R}',   s)
+    s = re.sub(r'_(.+?)_',       lambda m: f'{I}{BLUE}{m.group(1)}{R}',   s)
+    s = re.sub(r'`(.+?)`',       lambda m: f'{GREEN}{m.group(1)}{R}',     s)
+    s = re.sub(r'~~(.+?)~~',     lambda m: f'{D}{m.group(1)}{R}',         s)
+    return s
+
+def render_code_block(lang, code):
+    """Render a fenced code block with bat if language given, else plain."""
+    lang = lang or ''
+    try:
+        if lang:
+            res = subprocess.run(
+                ['bat', f'--language={lang}', '--theme=Monokai Extended',
+                 '--style=plain', '--color=always'],
+                input=code, capture_output=True, text=True, timeout=30
+            )
+            if res.returncode == 0:
+                return res.stdout
+    except Exception:
+        pass
+    # fallback: plain colored block
+    lines = []
+    for line in code.splitlines():
+        lines.append(f'  {line}')
+    return '\n'.join(lines) + '\n'
+
+def render(md):
+    out_lines = []
+    i = 0
+    lines = md.splitlines()
+    while i < len(lines):
+        line = lines[i]
+
+        # fenced code block
+        m = re.match(r'^(`{3,}|~{3,})(\w*)', line)
+        if m:
+            fence = m.group(1)
+            lang = m.group(2)
+            code_lines = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith(fence):
+                code_lines.append(lines[i])
+                i += 1
+            i += 1  # skip closing fence
+            out_lines.append(render_code_block(lang, '\n'.join(code_lines)))
+            continue
+
+        # ATX heading
+        m = re.match(r'^(#{1,6})\s+(.+)$', line)
+        if m:
+            level = len(m.group(1))
+            text = inline(m.group(2))
+            if level == 1:
+                out_lines.append(f'{B}{PINK}{text}{R}')
+                out_lines.append(f'{PINK}{"─" * 60}{R}')
+            elif level == 2:
+                out_lines.append(f'{B}{PURPLE}{text}{R}')
+                out_lines.append(f'{PURPLE}{"─" * 40}{R}')
+            else:
+                out_lines.append(f'{B}{ORANGE}{text}{R}')
+            out_lines.append('')
+            i += 1
+            continue
+
+        # horizontal rule
+        if re.match(r'^(-{3,}|\*{3,}|_{3,})\s*$', line):
+            out_lines.append(f'{PURPLE}{"─" * 60}{R}')
+            out_lines.append('')
+            i += 1
+            continue
+
+        # blockquote
+        if line.startswith('> '):
+            text = inline(line[2:])
+            out_lines.append(f'{D}{CYAN}│ {text}{R}')
+            i += 1
+            continue
+        if line.startswith('>'):
+            text = inline(line[1:])
+            out_lines.append(f'{D}{CYAN}│ {text}{R}')
+            i += 1
+            continue
+
+        # unordered list
+        mm = re.match(r'^([\s]*)([-*+])\s+(.+)$', line)
+        if mm:
+            indent = mm.group(1)
+            marker = mm.group(2)
+            text = inline(mm.group(3))
+            bullet = f'{ORANGE}{marker}{R}'
+            out_lines.append(f'  {indent}{bullet} {text}')
+            i += 1
+            continue
+
+        # ordered list
+        mm = re.match(r'^(\s*)(\d+)\.\s+(.+)$', line)
+        if mm:
+            indent = mm.group(1)
+            num = mm.group(2)
+            text = inline(mm.group(3))
+            out_lines.append(f'  {indent}{ORANGE}{num}.{R} {text}')
+            i += 1
+            continue
+
+        # regular paragraph line
+        text = inline(line)
+        if text:
+            out_lines.append(text)
+        else:
+            out_lines.append('')
+        i += 1
+
+    return '\n'.join(out_lines)
+
+if __name__ == '__main__':
+    md = sys.stdin.read()
+    sys.stdout.write(render(md))
