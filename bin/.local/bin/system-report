@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# system-report — static + live machine facts in one shot (agent-friendly).
+# Static block mirrors the Hardware section in machine-facts/AGENTS.md;
+# update both if hardware changes. Live block needs no deps beyond coreutils.
+
+echo "== $(hostname): static =="
+cat <<'EOF'
+CPU    Ryzen 9 9950X3D 16C/32T
+RAM    32GB (30Gi usable, no swap)
+GPU    RTX 3070 8GB (NVIDIA proprietary)
+DISK   2x1TB NVMe: root=LS nvme1n1p2 "/", data=Corsair MP700 nvme0n1
+MON    DP-0 3440x1440@165Hz
+NET    wlan0 + tailscale0
+AUDIO  HDMI -> LC34G55T
+USER   alitoh
+EOF
+
+echo
+echo "== live: $(date '+%Y-%m-%d %H:%M') =="
+echo "kernel: $(uname -r) | uptime: $(uptime -p | sed 's/^up //') | load: $(cut -d' ' -f1-3 /proc/loadavg)"
+free -h | awk '/^Mem/{printf "ram:    %s used / %s total (%.0f%%)\n", $3, $2, $3/$2*100}'
+df -h / 2>/dev/null | awk 'NR>1{printf "disk:   %s free / %s (%s)\n", $4, $2, $5}'
+if command -v nvidia-smi >/dev/null 2>&1; then
+  nvidia-smi --query-gpu=temperature.gpu,utilization.gpu,memory.used,power.draw --format=csv,noheader \
+    | awk -F, '{printf "gpu:    %s, %s util, %s VRAM used, %s\n", $1, $2, $3, $4}'
+fi
+ip -br addr show wlan0 2>/dev/null | awk '{printf "net:    wlan0 %s\n", $3}'
+ps -eo pmem,comm --sort=-pmem | head -6 | awk 'NR>1{printf "topmem: %s (%.0f%%)\n", $2, $1}'

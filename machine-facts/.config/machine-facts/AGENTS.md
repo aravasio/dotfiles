@@ -4,82 +4,47 @@
 
 # This machine
 
-Instructions for any AI agent operating on this host. Machine facts only — no
-project-specific opinions. Project rules belong in each repo's own AGENTS.md.
+Machine facts for AI agents on host `Titan`. Project rules → repo AGENTS.md.
 
-## What it is
+## Hardware (static — live: `system-report`)
 
-- **EndeavourOS** (Arch-based), kernel 6.18, **X11**
-- **i3** window manager, `$mod` = Mod4/Super, ~87 keybindings, i3blocks status bar
-- **picom** v12.5 compositor · **kitty** terminal · **zsh + Oh My Zsh** · **dunst** · **rofi** · **feh** · **i3lock**
-- NVIDIA RTX 3070 (proprietary driver), single 3440x1440 ultrawide
-- User: `alitoh`
+CPU Ryzen 9 9950X3D 16C/32T · RAM 32GB (30Gi usable, no swap) · GPU RTX 3070 8GB (NVIDIA proprietary) · 2x1TB NVMe (root LS `nvme1n1p2` /, data Corsair MP700 `nvme0n1`) · MON DP-0 3440x1440@165Hz · NET wlan0 + tailscale0 · AUDIO HDMI → LC34G55T · user `alitoh`
+Static specs are baked; dynamic stuff (disk free, load, GPU temp) = one command: `system-report`.
 
-**Package management: `yay` first, `pacman` only as fallback** (user
-preference; never apt). `sudo` requires a password that agents do not have —
-never write a plan that depends on installing something. Configuration must
-degrade gracefully when a tool is absent.
+## Software
 
-## Visual configuration
+EndeavourOS · X11 · kernel 7.x rolling (re-check: `uname -r`) · i3 `$mod`=Mod4/Super, ~87 binds, i3blocks bar · picom v12 · kitty · zsh+OMZ · dunst · rofi · feh · i3lock
 
-All colors derive from one palette, **Monokai Boosted**, defined in
-`~/.config/kitty/kitty-themes/themes/Monokai_Boosted.conf`:
+**Packages: `yay` first, `pacman` fallback, never apt.** `sudo` needs password agents lack — never write a plan depending on installing. Configs must degrade when tool absent.
+
+## Visual (Monokai Boosted — `~/.config/kitty/kitty-themes/themes/Monokai_Boosted.conf`)
 
 ```
-bg #16161a   fg #d8d8c8   pink #ff6ac1   green #a6f024   purple #ae81ff
-blue #48b8ff  cyan #46d9f0  orange #ffa41f  yellow #ffdc3d  red #ff2d6f
+bg #16161a  fg #d8d8c8  pink #ff6ac1  green #a6f024  purple #ae81ff
+blue #48b8ff cyan #46d9f0  orange #ffa41f  yellow #ffdc3d  red #ff2d6f
 ```
+Any new color: use these hexes.
 
-Anything new that shows color should use these hexes.
+## Traps (each bit someone)
 
-### Traps — each of these has bitten someone here
-
-- **kitty's `background_blur` does nothing on X11** (Wayland-only). Transparency
-  comes from kitty (`background_opacity`), blur from picom (`dual_kawase`).
-- **`~/.config/kitty/theme.conf` is a symlink** cycled by `kitty-theme-next`/`prev`
-  (`ctrl+shift+]`/`[`), which globs `*[mM]onokai*.conf`. Never put color
-  directives in `kitty.conf` — they would override every cycled theme. Add a new
-  `Monokai_*.conf` file instead.
-- **i3 colors live between `# THEME BLOCK START/END`** in `~/.config/i3/config`,
-  from `~/.config/i3/themes/*.conf`. `~/.config/i3/scripts/random-theme` can
-  swap the block on login but is **currently disabled** (its exec line is
-  commented). Edit the theme files, not the block.
-  `~/.config/i3/theme.conf` exists but is **not** included by anything — ignore it.
-- **Any i3 reload/restart re-runs `exec_always`** → picom and dunst restart.
-  Expected side effect, not a bug — but don't reload i3 casually on a busy screen.
-- **picom's v12 `animations` engine is the CONFIRMED cause of the 2026-07-26
-  full-desktop freezes** (3/3 crash boots with it, 0 without — GLX + NVIDIA 590).
-  It is stripped from all presets (originals archived in the
-  `~/.cleanup-quarantine-*` backup, 2026-08 cleanup). Do NOT reintroduce an
-  `animations` block unless the user explicitly asks and a fresh A/B test is run.
-- **`reload-picom` / `reload-dunst` / `reload-i3` are zsh aliases**
-  (`~/.config/zsh/40-aliases.zsh`) — they exist only in interactive shells,
-  not for agents. Use `picom-preset <name>` and `pkill dunst; dunst &` instead.
-- **picom's `rules` block is mutually exclusive** with `blur-background-exclude`,
-  `shadow-exclude`, `opacity-rule`, `inactive-opacity`, `focus-exclude` and
-  `wintypes`. These configs use the standalone options; adding `rules` silently
-  disables all of them.
-- **`~/.config/picom/picom.conf` is a symlink** into `~/.config/picom/presets/`,
-  switched by `picom-preset` (`$mod+]`/`[` to cycle, `$mod+Shift+p` for a rofi
-  menu). Edit the preset file you are actually on — `picom-preset current` tells
-  you which. Each preset is standalone because libconfig rejects duplicate keys,
-  so there is no base-plus-override layering.
-- **kitty owns `ctrl+alt+*`** for splits and window navigation, deliberately
-  leaving `alt+f` / `alt+d` / `alt+l` to zsh's word commands. Keep it that way.
+1. **kitty `background_blur` = no-op on X11.** Transparency: kitty `background_opacity`; blur: picom `dual_kawase`.
+2. **`~/.config/kitty/theme.conf` = symlink** cycled by kitty-theme-next/prev (`ctrl+shift+]`/`[`, globs `*[mM]onokai*.conf`). Never put colors in kitty.conf — overrides every cycled theme. Add `Monokai_*.conf` instead.
+3. **i3 colors live between `# THEME BLOCK START/END`** in `~/.config/i3/config`, sourced from `~/.config/i3/themes/*.conf`. Edit theme files, not the block. `random-theme` swap disabled (exec commented). `~/.config/i3/theme.conf` included by nothing — ignore.
+4. **i3 reload/restart re-runs `exec_always`** → picom+dunst restart. Expected; don't reload casually on a busy screen.
+5. **picom v12 `animations` = CONFIRMED cause of 2026-07-26 desktop freezes** (3/3 boots with it, 0 without — GLX+NVIDIA). Stripped from all presets (originals in `~/.cleanup-quarantine-*`). Do NOT reintroduce unless user asks + fresh A/B test.
+6. **`reload-picom`/`reload-dunst`/`reload-i3` = zsh aliases only** (`~/.config/zsh/40-aliases.zsh`), useless for agents. Use `picom-preset <name>` / `pkill dunst; dunst &`.
+7. **picom `rules` block mutually exclusive** with standalone options (`blur-background-exclude`, `shadow-exclude`, `opacity-rule`, `inactive-opacity`, `focus-exclude`, `wintypes`). Adding `rules` silently disables all.
+8. **`~/.config/picom/picom.conf` = symlink → `presets/`**, switched by `picom-preset` (`$mod+]`/`[` cycle, `$mod+Shift+p` rofi menu). Edit the preset you're on (`picom-preset current`). Standalone presets: libconfig rejects duplicate keys, no base+override.
+9. **kitty owns `ctrl+alt+*`** (splits/nav); `alt+f/d/l` stay zsh word commands. Keep it.
 
 ## Shell
 
-`~/.zshrc` is a thin entrypoint: it loads Oh My Zsh, then sources
-`~/.config/zsh/*.zsh` in order (`00-options`, `10-plugins`, `20-completion`,
-`30-tools`, `40-aliases`, `50-functions`, `60-keybinds`). Put changes in the
-matching module, not in `.zshrc`. Every optional tool is guarded with
-`command -v` / `(( $+commands[x] ))` — preserve that pattern.
+`~/.zshrc` thin: loads OMZ, sources `~/.config/zsh/*.zsh` in order (00-options · 10-plugins · 20-completion · 30-tools · 40-aliases · 50-functions · 60-keybinds). Changes go in matching module. Optional tools guarded `command -v` / `(( $+commands[x] ))` — preserve.
 
 ## Making changes
 
-1. Back up anything you overwrite (`cp file file.bak.$(date +%Y%m%d-%H%M%S)`).
+1. Backup before overwriting: `cp f f.bak.$(date +%Y%m%d-%H%M%S)`.
 2. Validate with the tool's own parser before claiming success:
-
 ```bash
 kitty +runpy 'from kitty.config import load_config; load_config("'$HOME'/.config/kitty/kitty.conf")'
 i3 -C -c ~/.config/i3/config
@@ -89,51 +54,28 @@ timeout 30 script -qec 'zsh -i -c "echo OK"' /dev/null     # zsh needs a pty
 jq -e . <file.json> >/dev/null
 python3 -c "import tomllib; tomllib.load(open('<file.toml>','rb'))"
 ```
-
-3. Reload: kitty `ctrl+shift+F5` · i3 `mod+shift+r` · `reload-picom` · `reload-dunst`.
-   Note that `kitty @` needs a tty, so it cannot be driven from a sandboxed shell.
+3. Reload: kitty `ctrl+shift+F5` · i3 `mod+shift+r` · `picom-preset <name>` · `pkill dunst; dunst &`. `kitty @` needs a tty — can't drive from sandboxed shell.
 
 ## Do not
 
-- Set git identity, credentials, or account details. There is intentionally no
-  `[user]` section in `~/.gitconfig`.
-- Assume a GUI action succeeded without evidence — many reloads cannot be
-  triggered from a non-interactive shell.
+- Set git identity, credentials, or account details. `~/.gitconfig` has no `[user]` on purpose.
+- Assume a GUI action succeeded without evidence — many reloads can't run from a non-interactive shell.
 
-## Dotfiles repo (added 2026-08)
+## Dotfiles repo (~/dotfiles, public: github.com/aravasio/dotfiles)
 
-- All configs are versioned in **~/dotfiles** (public:
-  github.com/aravasio/dotfiles) and symlinked into `$HOME` — editing a config
-  edits the repo. Commit + push after meaningful changes.
-- Layout is stow-compatible (package per app); `~/dotfiles/install.sh`
-  restores everything with backups. `~/dotfiles/AGENTS.md` has the full
-  restore guide for a fresh system.
-- **Secrets never go in the repo**: they live in `~/.zshrc.local`
-  (gitignored), e.g. `OPENROUTER_API_KEY_FOR_FREE_MODELS` used by `q-chat`.
+- All configs versioned + symlinked → editing a config edits the repo. Commit + push after meaningful changes.
+- Stow-compatible layout (package per app); `~/dotfiles/install.sh` restores with backups; full restore guide in `~/dotfiles/AGENTS.md`.
+- Secrets never in repo: `~/.zshrc.local` (gitignored), e.g. `OPENROUTER_API_KEY_FOR_FREE_MODELS` used by `q-chat`.
 
-## Local features (added 2026-07)
+## Local features
 
-- **kitty per-window random theme**: `$mod+Return` runs
-  `~/.local/bin/kitty-randtheme` (random theme from
-  `~/.config/kitty/theme-pool/*.conf`, symlinks); `$mod+Shift+Return` = plain
-  kitty with the global theme. The global `theme.conf` symlink is untouched.
-- **"Waiting for you" tile indicator**: Claude Code (`~/.claude/hooks/notify.sh`)
-  and OpenCode (`~/.config/opencode/plugins/attention.ts`, auto-loaded) mark
-  the terminal **urgent** (red i3 border + workspace button) and the kitty tab
-  orange when the agent finishes or asks something. i3 auto-clears on focus.
-  Mechanism: `xdotool set_window --urgency 1 $WINDOWID`.
-- **i3-border-pulse** (`$mod+Shift+b`, toggle): breathing pink↔purple on the
-  focused border. Was a freeze suspect, later cleared (picom animations were
-  the culprit) — safe to use.
-- **freeze-watchdog**: autostarts from i3; logs top processes to
-  `~/.cache/freeze-watchdog.log` when load spikes.
-- **theme-forge**: `~/.config/theme-forge/` — docs to generate full desktop
-  themes from keywords (AGENTS.md + PALETTE.md + KEYWORDS.md +
-  PROMPT-TEMPLATE.md). Point future LLM runs there. STATUS.md = live state.
-- **Keybind changes**: screenshot-select is `$mod+Shift+o`, screenshot-active `$mod+o`
-  (was `$mod+Shift+p`, duplicated with the picom preset menu which keeps `$mod+Shift+p`).
-- **YouTube lite theater-mode**: v1 (userContent.css) failed, disabled.
-  v2 plan (PiP window + picom focus-exclude) in theme-forge/STATUS.md.
+- **kitty per-window random theme**: `$mod+Return` → `~/.local/bin/kitty-randtheme` (from `~/.config/kitty/theme-pool/*.conf`); `$mod+Shift+Return` = plain global theme. Global `theme.conf` symlink untouched.
+- **Urgent "waiting for you" tile** when agent finishes/asks: Claude `~/.claude/hooks/notify.sh`, OpenCode `~/.config/opencode/plugins/attention.ts` → `xdotool set_window --urgency 1 $WINDOWID`. i3 clears on focus.
+- **i3-border-pulse** `$mod+Shift+b`: breathing pink↔purple border. Was freeze suspect, cleared (picom animations were culprit) — safe.
+- **freeze-watchdog**: autostart from i3; logs top procs to `~/.cache/freeze-watchdog.log` on load spikes.
+- **theme-forge**: `~/.config/theme-forge/` (AGENTS.md + PALETTE.md + KEYWORDS.md + PROMPT-TEMPLATE.md) — point LLM runs there; STATUS.md = live state.
+- **Screenshots**: select `$mod+Shift+o`, active `$mod+o` (picom menu keeps `$mod+Shift+p`).
+- **YouTube lite theater v1 failed/disabled**; v2 plan (PiP window + picom focus-exclude) in theme-forge/STATUS.md.
 
 <!-- caveman-begin -->
 Respond terse like smart caveman. All technical substance stay. Only fluff die.
