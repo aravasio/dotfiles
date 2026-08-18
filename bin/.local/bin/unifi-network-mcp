@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# unifi-network-mcp — sirkirby UniFi Network MCP server.
+# Credentials injected from ~/.config/unifi-mcp.env (chmod 600, gitignored).
+set -a; source ~/.config/unifi-mcp.env; set +a
+exec uvx --python-preference system unifi-network-mcp@latest "$@"

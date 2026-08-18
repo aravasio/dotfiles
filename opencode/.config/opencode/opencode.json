@@ -4,6 +4,14 @@
   "plugin": [
     "./plugins/caveman/plugin.js"
   ],
+  "mcp": {
+    "unifi-network": {
+      "type": "local",
+      "command": ["/home/alitoh/.local/bin/unifi-network-mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  },
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
