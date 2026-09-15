@@ -3,8 +3,16 @@ set -euo pipefail
 
 PROFILE_DIR="${HOME}/.mozilla/firefox/ytmusic-app"
 URL="https://music.youtube.com/"
+TRIDACTYL_ID="tridactyl.vim@cmcaine.co.uk"
+EXT_JSON="${PROFILE_DIR}/extensions.json"
 
 mkdir -p "${PROFILE_DIR}/chrome"
+
+# One-time setup: Tridactyl not in this profile yet -> open AMO page.
+# extensions.json updates on profile close; next launch flips to YT Music.
+if ! grep -q "${TRIDACTYL_ID}" "${EXT_JSON}" 2>/dev/null; then
+  URL="https://addons.mozilla.org/firefox/addon/tridactyl-vim/"
+fi
 
 exec /usr/lib/firefox/firefox \
   --no-remote \

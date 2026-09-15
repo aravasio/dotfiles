@@ -1,0 +1,1392 @@
+#!/usr/bin/env python3
+import ctypes as C
+import math
+import os
+import random
+import signal
+import subprocess
+import sys
+import time
+import array
+
+SDL = C.CDLL("libSDL2-2.0.so.0")
+
+SDL_INIT_VIDEO = 0x20
+SDL_WINDOW_OPENGL = 0x2
+SDL_WINDOW_FULLSCREEN_DESKTOP = 0x1001
+SDL_WINDOW_BORDERLESS = 0x10
+SDL_WINDOW_HIDDEN = 0x8
+SDL_QUIT = 0x100
+SDL_WINDOWEVENT = 0x200
+SDL_KEYDOWN = 0x300
+SDL_KEYUP = 0x301
+SDL_MOUSEMOTION = 0x400
+SDL_GL_CONTEXT_MAJOR_VERSION = 14
+SDL_GL_CONTEXT_MINOR_VERSION = 15
+SDL_GL_PROFILE_MASK = 17
+SDL_GL_DOUBLEBUFFER = 5
+SDL_GL_CONTEXT_PROFILE_CORE = 0x1
+
+KEYMAP = {80: "left", 79: "right", 26: "up", 27: "down", 44: "space", 20: "q",
+          30: "1", 31: "2", 32: "3", 33: "4", 34: "5", 35: "6", 36: "7",
+          37: "8", 38: "9", 39: "0", 19: "r", 34: "g", 33: "f", 41: "esc"}
+
+class SDL_Rect(C.Structure):
+    _fields_ = [("x", C.c_int), ("y", C.c_int), ("w", C.c_int), ("h", C.c_int)]
+
+class SDL_Point(C.Structure):
+    _fields_ = [("x", C.c_int), ("y", C.c_int)]
+
+
+def sd(name, restype, *args):
+    f = getattr(SDL, name)
+    f.restype = restype
+    f.argtypes = args
+    return f
+
+
+sd("SDL_GL_GetDrawableSize", None, C.c_void_p, C.POINTER(C.c_int), C.POINTER(C.c_int))
+sd("SDL_GetWindowPosition", None, C.c_void_p, C.POINTER(SDL_Point))
+sd("SDL_ShowWindow", None, C.c_void_p)
+sd("SDL_GetWindowSize", None, C.c_void_p, C.POINTER(SDL_Point))
+sd("SDL_GetDisplayBounds", C.c_int, C.c_int, C.POINTER(SDL_Rect))
+
+
+sd("SDL_Init", C.c_int, C.c_uint32)
+sd("SDL_Quit", None)
+sd("SDL_SetHint", C.c_int, C.c_char_p, C.c_char_p)
+sd("SDL_GL_SetAttribute", C.c_int, C.c_int, C.c_int)
+sd("SDL_CreateWindow", C.c_void_p, C.c_char_p, C.c_int, C.c_int, C.c_int, C.c_int, C.c_uint32)
+sd("SDL_DestroyWindow", None, C.c_void_p)
+sd("SDL_GL_CreateContext", C.c_void_p, C.c_void_p)
+sd("SDL_GL_DeleteContext", None, C.c_void_p)
+sd("SDL_GL_MakeCurrent", C.c_int, C.c_void_p, C.c_void_p)
+sd("SDL_GL_SetSwapInterval", C.c_int, C.c_int)
+sd("SDL_GL_SwapWindow", None, C.c_void_p)
+sd("SDL_GL_GetProcAddress", C.c_void_p, C.c_char_p)
+sd("SDL_PollEvent", C.c_int, C.c_void_p)
+sd("SDL_GetGlobalMouseState", C.c_uint32, C.POINTER(C.c_int), C.POINTER(C.c_int))
+
+
+def gl(name, restype, *args):
+    addr = SDL.SDL_GL_GetProcAddress(name.encode())
+    if not addr:
+        raise RuntimeError("GL missing: " + name)
+    return C.CFUNCTYPE(restype, *args)(addr)
+
+
+GL_FLOAT = 0x1406
+GL_HALF_FLOAT = 0x140B
+GL_TRIANGLES = 0x0004
+GL_TRIANGLE_STRIP = 0x0005
+GL_LINES = 0x0001
+GL_POINTS = 0x0000
+GL_ARRAY_BUFFER = 0x8892
+GL_STATIC_DRAW = 0x88E4
+GL_DYNAMIC_DRAW = 0x88E8
+GL_FRAGMENT_SHADER = 0x8B30
+GL_VERTEX_SHADER = 0x8B31
+GL_COMPILE_STATUS = 0x8B81
+GL_LINK_STATUS = 0x8B82
+GL_FRAMEBUFFER = 0x8D40
+GL_TEXTURE_2D = 0x0DE1
+GL_RGBA = 0x1908
+GL_RGBA16F = 0x881A
+GL_COLOR_ATTACHMENT0 = 0x8CE0
+GL_FRAMEBUFFER_COMPLETE = 0x8CD5
+GL_TEXTURE_MIN_FILTER = 0x2801
+GL_TEXTURE_MAG_FILTER = 0x2800
+GL_TEXTURE_WRAP_S = 0x2802
+GL_TEXTURE_WRAP_T = 0x2803
+GL_CLAMP_TO_EDGE = 0x812F
+GL_LINEAR = 0x2601
+GL_BLEND = 0x0BE2
+GL_SRC_ALPHA = 0x0302
+GL_ONE = 0x0001
+GL_PROGRAM_POINT_SIZE = 0x8642
+GL_TEXTURE0 = 0x84C0
+GL_TEXTURE1 = 0x84C1
+GL_TEXTURE2 = 0x84C2
+GL_COLOR_BUFFER_BIT = 0x4000
+GL_VERSION = 0x1F02
+
+G = {}
+
+
+def bind_gl():
+    def gl(name, restype, *args):
+        addr = SDL.SDL_GL_GetProcAddress(name.encode())
+        if not addr:
+            raise RuntimeError("GL missing: " + name)
+        return C.CFUNCTYPE(restype, *args)(addr)
+
+    G["GenVertexArrays"] = gl("glGenVertexArrays", None, C.c_int, C.POINTER(C.c_uint))
+    G["DeleteVertexArrays"] = gl("glDeleteVertexArrays", None, C.c_int, C.POINTER(C.c_uint))
+    G["BindVertexArray"] = gl("glBindVertexArray", None, C.c_uint)
+    G["GenBuffers"] = gl("glGenBuffers", None, C.c_int, C.POINTER(C.c_uint))
+    G["DeleteBuffers"] = gl("glDeleteBuffers", None, C.c_int, C.POINTER(C.c_uint))
+    G["BindBuffer"] = gl("glBindBuffer", None, C.c_uint, C.c_uint)
+    G["BufferData"] = gl("glBufferData", None, C.c_uint, C.c_long, C.c_void_p, C.c_uint)
+    G["BufferSubData"] = gl("glBufferSubData", None, C.c_uint, C.c_long, C.c_long, C.c_void_p)
+    G["VertexAttribPointer"] = gl("glVertexAttribPointer", None, C.c_uint, C.c_int, C.c_uint, C.c_ubyte, C.c_int, C.c_void_p)
+    G["EnableVertexAttribArray"] = gl("glEnableVertexAttribArray", None, C.c_uint)
+    G["DisableVertexAttribArray"] = gl("glDisableVertexAttribArray", None, C.c_uint)
+    G["CreateShader"] = gl("glCreateShader", C.c_uint, C.c_uint)
+    G["ShaderSource"] = gl("glShaderSource", None, C.c_uint, C.c_int, C.POINTER(C.c_char_p), C.c_void_p)
+    G["CompileShader"] = gl("glCompileShader", None, C.c_uint)
+    G["GetShaderiv"] = gl("glGetShaderiv", None, C.c_uint, C.c_uint, C.POINTER(C.c_int))
+    G["GetShaderInfoLog"] = gl("glGetShaderInfoLog", None, C.c_uint, C.c_int, C.c_void_p, C.c_void_p)
+    G["CreateProgram"] = gl("glCreateProgram", C.c_uint)
+    G["AttachShader"] = gl("glAttachShader", None, C.c_uint, C.c_uint)
+    G["LinkProgram"] = gl("glLinkProgram", None, C.c_uint)
+    G["GetProgramiv"] = gl("glGetProgramiv", None, C.c_uint, C.c_uint, C.POINTER(C.c_int))
+    G["GetProgramInfoLog"] = gl("glGetProgramInfoLog", None, C.c_uint, C.c_int, C.c_void_p, C.c_void_p)
+    G["DeleteShader"] = gl("glDeleteShader", None, C.c_uint)
+    G["DeleteProgram"] = gl("glDeleteProgram", None, C.c_uint)
+    G["UseProgram"] = gl("glUseProgram", None, C.c_uint)
+    G["GetUniformLocation"] = gl("glGetUniformLocation", C.c_int, C.c_uint, C.c_char_p)
+    G["Uniform1f"] = gl("glUniform1f", None, C.c_int, C.c_float)
+    G["Uniform2f"] = gl("glUniform2f", None, C.c_int, C.c_float, C.c_float)
+    G["Uniform3f"] = gl("glUniform3f", None, C.c_int, C.c_float, C.c_float, C.c_float)
+    G["Uniform1i"] = gl("glUniform1i", None, C.c_int, C.c_int)
+    G["GenFramebuffers"] = gl("glGenFramebuffers", None, C.c_int, C.POINTER(C.c_uint))
+    G["BindFramebuffer"] = gl("glBindFramebuffer", None, C.c_uint, C.c_uint)
+    G["FramebufferTexture2D"] = gl("glFramebufferTexture2D", None, C.c_uint, C.c_uint, C.c_uint, C.c_uint, C.c_int)
+    G["CheckFramebufferStatus"] = gl("glCheckFramebufferStatus", C.c_uint, C.c_uint)
+    G["GenTextures"] = gl("glGenTextures", None, C.c_int, C.POINTER(C.c_uint))
+    G["BindTexture"] = gl("glBindTexture", None, C.c_uint, C.c_uint)
+    G["TexImage2D"] = gl("glTexImage2D", None, C.c_uint, C.c_int, C.c_int, C.c_int, C.c_int, C.c_int, C.c_uint, C.c_uint, C.c_void_p)
+    G["TexParameteri"] = gl("glTexParameteri", None, C.c_uint, C.c_uint, C.c_int)
+    G["ActiveTexture"] = gl("glActiveTexture", None, C.c_uint)
+    G["Enable"] = gl("glEnable", None, C.c_uint)
+    G["Disable"] = gl("glDisable", None, C.c_uint)
+    G["BlendFunc"] = gl("glBlendFunc", None, C.c_uint, C.c_uint)
+    G["ClearColor"] = gl("glClearColor", None, C.c_float, C.c_float, C.c_float, C.c_float)
+    G["Clear"] = gl("glClear", None, C.c_uint)
+    G["Viewport"] = gl("glViewport", None, C.c_int, C.c_int, C.c_int, C.c_int)
+    G["DrawArrays"] = gl("glDrawArrays", None, C.c_uint, C.c_int, C.c_int)
+    G["GetString"] = gl("glGetString", C.c_void_p, C.c_uint)
+
+
+def loc(prog, name):
+    return G["GetUniformLocation"](prog, name.encode())
+
+
+def shader(src, kind):
+    sid = G["CreateShader"](kind)
+    csrc = C.c_char_p(src.encode())
+    G["ShaderSource"](sid, 1, C.byref(csrc), None)
+    G["CompileShader"](sid)
+    ok = C.c_int(0)
+    G["GetShaderiv"](sid, GL_COMPILE_STATUS, C.byref(ok))
+    if not ok.value:
+        buf = C.create_string_buffer(4096)
+        G["GetShaderInfoLog"](sid, 4095, None, buf)
+        raise RuntimeError("shader compile:\n" + buf.value.decode(errors="replace")[:2000])
+    return sid
+
+
+def program(vert, frag):
+    vs = shader(vert, GL_VERTEX_SHADER)
+    fs = shader(frag, GL_FRAGMENT_SHADER)
+    p = G["CreateProgram"]()
+    G["AttachShader"](p, vs)
+    G["AttachShader"](p, fs)
+    G["LinkProgram"](p)
+    ok = C.c_int(0)
+    G["GetProgramiv"](p, GL_LINK_STATUS, C.byref(ok))
+    G["DeleteShader"](vs)
+    G["DeleteShader"](fs)
+    if not ok.value:
+        raise RuntimeError("program link failed")
+    return p
+
+
+VERT_FS = """#version 330 core
+layout(location=0) in vec2 aPos;
+out vec2 uv;
+void main(){ uv = aPos*0.5+0.5; gl_Position = vec4(aPos,0.0,1.0); }
+"""
+
+PAL = """#version 330 core
+const vec3 ROSE=vec3(0.953,0.000,0.373);
+const vec3 GREEN=vec3(0.592,0.878,0.137);
+const vec3 ORANGE=vec3(0.980,0.518,0.098);
+const vec3 YELLO=vec3(0.875,0.835,0.380);
+const vec3 PURPLE=vec3(0.612,0.392,0.996);
+const vec3 CYAN=vec3(0.341,0.820,0.918);
+const vec3 BG=vec3(0.098,0.098,0.098);
+const vec3 WHITE=vec3(0.965,0.965,0.933);
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
+float a=hash(i),b=hash(i+vec2(1,0)),c=hash(i+vec2(0,1)),d=hash(i+vec2(1,1));
+return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}
+float fbm(vec2 p){float v=0.0,a=0.5;for(int i=0;i<4;i++){v+=a*noise(p);p*=2.03;a*=0.5;}return v;}
+"""
+
+FRAG_AURORA = PAL + """
+uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+vec3 curtain(vec3 col, vec2 p, float ny, float base, float speed, float shift){
+  float n=fbm(vec2(p.x*0.9+uTime*speed+shift, col.y*2.3+uTime*0.05));
+  float cbase=base+(n-0.5)*0.6;
+  float band=smoothstep(0.07,0.0,abs(ny-cbase))*smoothstep(0.92,0.55,ny);
+  float core=smoothstep(0.006,0.0,abs(ny-cbase));
+  return col*band*0.55+WHITE*core*0.45*band;
+}
+void main(){
+  vec2 p=uv*vec2(uRes.x/uRes.y,1.0);
+  float ny=uv.y;
+  vec3 col=mix(BG,vec3(0.045,0.045,0.06),smoothstep(0.0,0.5,ny));
+  col+=curtain(CYAN,p,ny,0.30,0.08,0.0);
+  col+=curtain(GREEN,p,ny,0.40,0.07,1.7);
+  col+=curtain(PURPLE,p,ny,0.44,0.09,4.0);
+  col+=curtain(ROSE,p,ny,0.54,0.06,2.8);
+  col+=curtain(YELLO,p,ny,0.62,0.05,5.2);
+  vec2 sp=p*vec2(14.0,9.0);
+  vec2 c=floor(sp); float h=hash(c+fract(uTime*0.01));
+  if(h>0.99){
+    float a=(h-0.99)*420.0*(0.55+0.45*sin(uTime*2.0+h*40.0));
+    col+=WHITE*a;
+  }
+  float terr=0.64+noise(vec2(p.x*3.0,0.0))*0.03+fbm(vec2(p.x*7.0,0.0))*0.05;
+  col=mix(col,vec3(0.02,0.02,0.03),smoothstep(terr,terr+0.02,ny));
+  frag=vec4(col,1.0);
+}
+"""
+
+FRAG_STARFALL = PAL + """
+uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+void main(){
+  vec2 p=(uv*2.0-1.0)*vec2(uRes.x/uRes.y,1.0);
+  float r=length(p); float a=atan(p.y,p.x)-uTime*0.22;
+  float arms=sin(a*2.0-r*1.8+uTime*0.35)*exp(-r*1.15);
+  float core=exp(-r*r*5.5);
+  float dust=exp(-r*1.4);
+  vec3 col=vec3(0.012);
+  col+=CYAN*max(0.0,arms)*0.85;
+  col+=PURPLE*dust*0.22;
+  col+=ROSE*core*1.35+WHITE*exp(-r*r*22.0)*1.1;
+  vec2 sp=p*38.0;
+  vec2 cc=floor(sp); float h=hash(cc);
+  if(h>0.992){
+    float a=(h-0.992)*520.0*(0.6+0.4*sin(uTime*3.0+h*13.0));
+    col+=WHITE*a*0.5;
+  }
+  col+=CYAN*exp(-r*0.9)*0.05;
+  frag=vec4(col,1.0);
+}
+"""
+
+FRAG_PLASMA = PAL + """
+uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+void main(){
+  vec2 p=uv*2.0-1.0;
+  vec2 q=vec2(sin(p.x*2.1+uTime*0.5),cos(p.y*2.3-uTime*0.4));
+  float v=sin((p.x+q.x)*6.0+uTime*0.6)+sin((p.y+q.y)*7.0-uTime*0.5)
+          +sin((p.x+p.y+q.x+q.y)*5.0+uTime*0.9)+sin(length(p)*9.0-uTime*1.2);
+  v=v/4.0*0.5+0.5;
+  float t=pow(clamp(v,0.0,1.0),1.3);
+  vec3 col=mix(BG,ROSE,smoothstep(0.0,0.4,t));
+  col=mix(col,PURPLE,smoothstep(0.25,0.55,t));
+  col=mix(col,CYAN,smoothstep(0.5,0.8,t));
+  col=mix(col,YELLO,smoothstep(0.75,1.0,t));
+  col+=WHITE*smoothstep(0.92,1.0,t)*0.35;
+  frag=vec4(col,1.0);
+}
+"""
+
+FRAG_CAUSTIC = PAL + """
+uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+void main(){
+  vec2 p=uv*vec2(uRes.x/uRes.y,1.0)*4.0;
+  float s=0.0;
+  s+=abs(sin(p.x*0.8+uTime*0.6)*cos(p.y*0.9-uTime*0.4));
+  s+=abs(sin(p.x*1.6-uTime*0.8)*cos(p.y*1.4+uTime*0.5))*0.8;
+  s+=abs(sin((p.x+p.y)*2.4+uTime*0.3))*0.6;
+  s+=abs(sin(p.x*3.2-uTime*1.0)*cos(p.y*3.7+uTime*0.7))*0.4;
+  s*=0.28;
+  float t=clamp(s*1.15,0.0,1.0);
+  vec3 col=mix(BG,CYAN,smoothstep(0.0,0.35,t));
+  col=mix(col,YELLO,smoothstep(0.3,0.6,t));
+  col=mix(col,ROSE,smoothstep(0.6,0.9,t));
+  col+=WHITE*smoothstep(0.85,1.0,t)*0.55;
+  frag=vec4(col,1.0);
+}
+"""
+
+FRAG_MANDEL = PAL + """
+uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+void main(){
+  float r=pow(10.0,-2.0-2.5*fract(uTime/50.0));
+  vec2 c=vec2(-0.7436,0.1318)+vec2(0.0005*cos(uTime*0.2),0.0004*sin(uTime*0.17));
+  vec2 p=((uv*2.0-1.0)*vec2(uRes.x/uRes.y,1.0))*r+c;
+  vec2 z=p; float it=0.0;
+  for(int i=0;i<90;i++){ if(dot(z,z)>4.0) break; z=vec2(z.x*z.x-z.y*z.y,2.0*z.x*z.y)+p; it+=1.0; }
+  float mu=it+1.0-log2(log2(max(1.0,dot(z,z))))*0.5;
+  float t=clamp(mu/45.0,0.0,1.0);
+  vec3 col=mix(BG,ROSE,smoothstep(0.05,0.3,t));
+  col=mix(col,PURPLE,smoothstep(0.3,0.5,t));
+  col=mix(col,CYAN,smoothstep(0.5,0.7,t));
+  col=mix(col,GREEN,smoothstep(0.7,0.95,t));
+  if(it>=90.0) col=BG;
+  frag=vec4(col,1.0);
+}
+"""
+
+FRAG_JULIA = PAL + """
+uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+void main(){
+  vec2 c=vec2(-0.4,0.6)+0.35*vec2(cos(uTime*0.4),sin(uTime*0.5));
+  vec2 p=(uv*2.0-1.0)*vec2(uRes.x/uRes.y,1.0)*1.5;
+  vec2 z=p; float it=0.0;
+  for(int i=0;i<80;i++){ if(dot(z,z)>4.0) break; z=vec2(z.x*z.x-z.y*z.y,2.0*z.x*z.y)+c; it+=1.0; }
+  float mu=it+1.0-log2(log2(max(1.0,dot(z,z))))*0.5;
+  float t=clamp(mu/35.0,0.0,1.0);
+  int k=int(t*24.0);
+  vec3 col=BG;
+  if(t<0.999){
+    vec3 pal[6];
+    pal[0]=PURPLE; pal[1]=CYAN; pal[2]=GREEN; pal[3]=YELLO; pal[4]=ROSE; pal[5]=ORANGE;
+    col=pal[k%6];
+  }
+  float band=fract(t*24.0);
+  col+=WHITE*smoothstep(0.04,0.0,min(band,1.0-band))*0.9;
+  frag=vec4(col,1.0);
+}
+"""
+
+FRAG_RAINBG = PAL + """
+uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+void main(){
+  vec3 col=mix(vec3(0.02,0.025,0.035),vec3(0.008,0.01,0.018),smoothstep(0.3,0.86,uv.y));
+  float lamp=exp(-pow((uv.x-0.22)/0.03,2.0))*exp(-pow((uv.y-0.72)/0.06,2.0));
+  col+=vec3(1.0,0.9,0.5)*lamp*0.12;
+  float lamp2=exp(-pow((uv.x-0.78)/0.03,2.0))*exp(-pow((uv.y-0.6)/0.05,2.0));
+  col+=CYAN*lamp2*0.1;
+  float streak=step(0.985,fract(uv.y*140.0-uTime*2.5+uv.x*7.0));
+  col+=CYAN*streak*0.02*(1.0-uv.y*0.3);
+  float terr=0.92;
+  col=mix(col,vec3(0.006,0.008,0.015),smoothstep(terr-0.01,terr+0.01,uv.y));
+  float pglow=exp(-pow((uv.y-0.95)/0.05,2.0))*0.06;
+  col+=CYAN*pglow+ROSE*pglow*0.4;
+  frag=vec4(col,1.0);
+}
+"""
+
+FRAG_STORMBG = PAL + """
+uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+void main(){
+  vec2 p=uv*vec2(uRes.x/uRes.y,1.0);
+  vec3 col=mix(vec3(0.03,0.03,0.05),vec3(0.006,0.006,0.012),smoothstep(0.0,0.55,uv.y));
+  float n=fbm(vec2(p.x*2.2-uTime*0.04,p.y*3.4+uTime*0.02));
+  col+=vec3(0.05,0.05,0.09)*n*0.6;
+  float band=step(0.62,uv.y)*(0.6+fbm(vec2(p.x*4.0,uTime*0.1))*0.5);
+  col+=vec3(0.07,0.07,0.12)*band*0.5;
+  float streak=step(0.98,fract(uv.y*120.0-uTime*6.0+uv.x*5.0));
+  col+=vec3(0.4,0.5,0.7)*streak*0.05;
+  float terr=0.88;
+  col=mix(col,vec3(0.004,0.004,0.008),smoothstep(terr-0.01,terr+0.01,uv.y));
+  frag=vec4(col,1.0);
+}
+"""
+
+FRAG_NEON = PAL + """
+uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+void main(){
+  vec2 p=(uv*2.0-1.0)*vec2(uRes.x/uRes.y,1.0);
+  float d=length(p);
+  vec3 col=BG*0.7;
+  col+=PURPLE*exp(-d*3.0)*0.1+CYAN*exp(-d*6.0)*0.05+ROSE*exp(-d*9.0)*0.03;
+  frag=vec4(col,1.0);
+}
+"""
+
+FRAG_SUNBEAMS = PAL + """
+uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+void main(){
+  vec2 p=(uv*2.0-1.0)*vec2(uRes.x/uRes.y,1.0);
+  float ang=uTime*0.03+0.6;
+  float ca=cos(ang),sa=sin(ang);
+  vec2 q=vec2(dot(p,vec2(ca,sa)),dot(p,vec2(-sa,ca)));
+  float beams=0.0;
+  for(int i=0;i<5;i++){
+    float phase=float(i)*0.5+uTime*0.05;
+    beams+=exp(-pow(q.x+phase,2.0)*2.5);
+  }
+  beams=beams/3.0*exp(-abs(q.y)*0.35);
+  vec3 col=BG;
+  col+=CYAN*beams*0.5;
+  col+=ROSE*beams*beams*0.4;
+  col+=WHITE*pow(max(0.0,1.0-length(p)*0.5),3.0)*0.25;
+  frag=vec4(col,1.0);
+}
+"""
+
+FRAG_BLUR = """#version 330 core
+uniform sampler2D uTex; uniform vec2 uDir; uniform float uRad;
+in vec2 uv; out vec4 frag;
+void main(){
+  vec4 s=texture(uTex,uv);
+  vec4 acc=s*0.227027;
+  for(int i=1;i<5;i++){
+    float wgt=0.1945946*exp(-0.5*float(i*i));
+    acc+=texture(uTex,uv+uDir*uRad*float(i))*wgt;
+    acc+=texture(uTex,uv-uDir*uRad*float(i))*wgt;
+  }
+  frag=acc;
+}
+"""
+
+FRAG_MIX = """#version 330 core
+uniform sampler2D uTexA; uniform sampler2D uTexB; uniform float uT;
+in vec2 uv; out vec4 frag;
+void main(){ frag=mix(texture(uTexA,uv),texture(uTexB,uv),uT); }
+"""
+
+FRAG_DOWN = """#version 330 core
+uniform sampler2D uTex;
+in vec2 uv; out vec4 frag;
+void main(){ frag=texture(uTex,uv); }
+"""
+
+FRAG_FINAL = """#version 330 core
+uniform sampler2D uScene; uniform sampler2D uBloom; uniform float uFlash;
+uniform float uExposure; uniform vec2 uRes; uniform float uTime;
+in vec2 uv; out vec4 frag;
+float hash2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+void main(){
+  vec3 s=texture(uScene,uv).rgb;
+  vec3 b=texture(uBloom,uv).rgb;
+  vec3 col=s+b*0.7;
+  col+=vec3(uFlash);
+  vec2 q=uv*2.0-1.0;
+  q.x*=uRes.x/uRes.y;
+  float vg=smoothstep(1.45,0.35,length(q));
+  col*=mix(1.0,0.82,1.0-vg)*uExposure;
+  col+=(hash2(uv*uRes+uTime)-0.5)/255.0;
+  col=pow(max(col,vec3(0.0)),vec3(1.0/2.2));
+  frag=vec4(col,1.0);
+}
+"""
+
+SPRITE_VERT = """#version 330 core
+layout(location=0) in vec2 aPos;
+uniform vec2 uRes; uniform vec2 uTl; uniform float uSize; uniform vec3 uColor; uniform float uAlpha;
+out vec3 vCol; out float vA; out vec2 vUV;
+void main(){
+  vec2 p=aPos*uSize+uTl;
+  vec2 ndc=vec2(p.x/uRes.x*2.0-1.0,1.0-p.y/uRes.y*2.0);
+  gl_Position=vec4(ndc,0.0,1.0);
+  vCol=uColor; vA=uAlpha; vUV=aPos+0.5;
+}
+"""
+
+SPRITE_FRAG = """#version 330 core
+in vec3 vCol; in float vA; in vec2 vUV; out vec4 frag;
+void main(){
+  float d=length(vUV-0.5);
+  float a=exp(-d*d*8.0);
+  frag=vec4(vCol*a*vA,1.0);
+}
+"""
+
+PART_VERT = """#version 330 core
+layout(location=0) in vec2 aPos;
+layout(location=1) in vec4 aCol;
+layout(location=2) in float aSize;
+uniform vec2 uRes;
+out vec4 vCol;
+void main(){
+  vec2 ndc=vec2(aPos.x/uRes.x*2.0-1.0,1.0-aPos.y/uRes.y*2.0);
+  gl_Position=vec4(ndc,0.0,1.0);
+  gl_PointSize=max(1.0,aSize*(uRes.y/900.0));
+  vCol=aCol;
+}
+"""
+
+PART_FRAG = """#version 330 core
+in vec4 vCol; out vec4 frag;
+void main(){
+  vec2 q=gl_PointCoord-0.5;
+  float a=exp(-dot(q,q)*14.0);
+  frag=vCol*a;
+}
+"""
+
+CYC = [
+    ("aurora", FRAG_AURORA, "stars", 600),
+    ("starfall", FRAG_STARFALL, "stars", 1400),
+    ("neon", FRAG_NEON, "neon", 3200),
+    ("rain", FRAG_RAINBG, "rain", 900),
+    ("storm", FRAG_STORMBG, "rain", 300),
+    ("plasma", FRAG_PLASMA, None, 0),
+    ("caustic", FRAG_CAUSTIC, None, 0),
+    ("sunbeams", FRAG_SUNBEAMS, None, 0),
+    ("mandel", FRAG_MANDEL, None, 0),
+    ("julia", FRAG_JULIA, None, 0),
+]
+
+COLORS = [(87, 209, 234), (246, 246, 238), (223, 213, 97), (156, 100, 254), (243, 0, 95), (151, 224, 35)]
+
+
+class Engine:
+    FIELDS = 8
+
+    def __init__(self, w, h):
+        self.w = w
+        self.h = h
+        self.t = 0.0
+        self.paused = False
+        self.bloom = True
+        self.focus = True
+        self.flash = 0.0
+        self.mouse = (w / 2, h * 0.7)
+        self.scene = int(os.environ.get("WALLY_START", "0"))
+        self.next = -1
+        self.trans_t = 0.0
+        self.trans = 1.6
+        self.notify_last = ""
+        self.frame_start = time.time()
+        self.dt = 1.0 / 60.0
+        self.cmd_file = os.path.expanduser("~/.cache/wallygl.cmd")
+        self.cmd_mtime = 0.0
+
+        self.progs = []
+        self.unames = ["uTime", "uRes"]
+        self.uloc = []
+        for name, frag, _, _ in CYC:
+            p = program(VERT_FS, frag)
+            self.progs.append(p)
+            self.uloc.append((loc(p, "uTime"), loc(p, "uRes")))
+        self.prog_blur = program(VERT_FS, FRAG_BLUR)
+        self.prog_mix = program(VERT_FS, FRAG_MIX)
+        self.prog_down = program(VERT_FS, FRAG_DOWN)
+        self.prog_final = program(VERT_FS, FRAG_FINAL)
+        self.prog_sprite = program(SPRITE_VERT, SPRITE_FRAG)
+        self.prog_part = program(PART_VERT, PART_FRAG)
+
+        self.lb = {}
+        for pm, name in ((self.prog_blur, "blur"), (self.prog_mix, "mix"),
+                         (self.prog_down, "down"), (self.prog_final, "final"),
+                         (self.prog_sprite, "sprite"), (self.prog_part, "part")):
+            self.lb[name] = {}
+        for n in ("uTex", "uDir", "uRad"):
+            self.lb["blur"][n] = loc(self.prog_blur, n)
+        for n in ("uTexA", "uTexB", "uT"):
+            self.lb["mix"][n] = loc(self.prog_mix, n)
+        self.lb["down"]["uTex"] = loc(self.prog_down, "uTex")
+        for n in ("uScene", "uBloom", "uFlash", "uExposure", "uRes", "uTime"):
+            self.lb["final"][n] = loc(self.prog_final, n)
+        for n in ("uRes", "uTl", "uSize", "uColor", "uAlpha"):
+            self.lb["sprite"][n] = loc(self.prog_sprite, n)
+        self.lb["part"]["uRes"] = loc(self.prog_part, "uRes")
+
+        vaos = (C.c_uint * 3)()
+        G["GenVertexArrays"](3, vaos)
+        self.vao_quad, self.vao_sprite, self.vao_dyn = vaos[0], vaos[1], vaos[2]
+        bufs = (C.c_uint * 3)()
+        G["GenBuffers"](3, bufs)
+        self.vbo_quad, self.vbo_sprite, self.vbo_dyn = bufs[0], bufs[1], bufs[2]
+
+        quad = array.array("f", [-1, -1, 1, -1, -1, 1, 1, 1])
+        G["BindBuffer"](GL_ARRAY_BUFFER, self.vbo_quad)
+        G["BufferData"](GL_ARRAY_BUFFER, len(quad) * 4, quad.buffer_info()[0], GL_STATIC_DRAW)
+        sq = array.array("f", [-0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5])
+        G["BindBuffer"](GL_ARRAY_BUFFER, self.vbo_sprite)
+        G["BufferData"](GL_ARRAY_BUFFER, len(sq) * 4, sq.buffer_info()[0], GL_STATIC_DRAW)
+        G["BindBuffer"](GL_ARRAY_BUFFER, 0)
+
+        self.parts = {}
+        for kind, count in (("stars", 1500), ("rain", 1200), ("neon", 3200), ("splash", 1400)):
+            self.parts[kind] = array.array("f", [0.0]) * (count * self.FIELDS)
+        self.partsn = {"stars": 1500, "rain": 1200, "neon": 3200, "splash": 1400}
+        self._seed_particles()
+
+        self.bolts = []
+        self.next_bolt = 1.0
+        self._pool_tex()
+        self.notify("wallygl ready: " + CYC[self.scene][0])
+
+    def _pool_tex(self):
+        w, h = self.w, self.h
+        def mk(w_, h_):
+            tex = C.c_uint(0)
+            G["GenTextures"](1, C.byref(tex))
+            G["BindTexture"](GL_TEXTURE_2D, tex)
+            G["TexImage2D"](GL_TEXTURE_2D, 0, GL_RGBA16F, w_, h_, 0, GL_RGBA, GL_HALF_FLOAT, None)
+            G["TexParameteri"](GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+            G["TexParameteri"](GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+            G["TexParameteri"](GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+            G["TexParameteri"](GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+            return tex.value
+        self.texA = mk(w, h)
+        self.texB = mk(w, h)
+        self.texM = mk(w, h)
+        self.blurA = mk(w // 2, h // 2)
+        self.blurB = mk(w // 2, h // 2)
+        fb = (C.c_uint * 5)()
+        G["GenFramebuffers"](5, fb)
+        self.fboA, self.fboB, self.fboM, self.fboB1, self.fboB2 = fb
+        for fbo, tex in ((self.fboA, self.texA), (self.fboB, self.texB),
+                         (self.fboM, self.texM), (self.fboB1, self.blurA),
+                         (self.fboB2, self.blurB)):
+            G["BindFramebuffer"](GL_FRAMEBUFFER, fbo)
+            G["FramebufferTexture2D"](GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0)
+        G["BindFramebuffer"](GL_FRAMEBUFFER, 0)
+        if G["CheckFramebufferStatus"](GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE:
+            raise RuntimeError("FBO incomplete")
+
+    def _seed_particles(self):
+        for kind in self.parts:
+            n = self.partsn[kind]
+            for i in range(n):
+                o = i * self.FIELDS
+                self.parts[kind][o] = random.uniform(0, self.w)
+                self.parts[kind][o + 1] = random.uniform(0, self.h)
+        for i in range(self.partsn["stars"]):
+            o = i * self.FIELDS
+            self.parts["stars"][o + 4] = random.uniform(0, 6.28)
+            self.parts["stars"][o + 5] = random.uniform(0.5, 2.2)
+            self.parts["stars"][o + 6] = random.uniform(1.2, 3.2)
+            self.parts["stars"][o + 7] = random.choice([0, 1, 2, 3])
+        for i in range(self.partsn["rain"]):
+            o = i * self.FIELDS
+            self.parts["rain"][o] = random.uniform(0, self.w)
+            self.parts["rain"][o + 1] = random.uniform(-self.h * 0.5, self.h)
+            self.parts["rain"][o + 2] = random.uniform(30, 90)
+            self.parts["rain"][o + 3] = random.uniform(0.55, 1.4)
+            self.parts["rain"][o + 6] = random.uniform(1.0, 2.8)
+            self.parts["rain"][o + 7] = random.choice([0, 2, 3])
+        for i in range(self.partsn["splash"]):
+            self.parts["splash"][i * self.FIELDS + 4] = -1.0
+
+    def notify(self, msg):
+        try:
+            subprocess.Popen(["notify-send", "-a", "wallygl", msg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
+    def draw_quad(self, vao, vbo):
+        G["BindVertexArray"](vao)
+        G["BindBuffer"](GL_ARRAY_BUFFER, vbo)
+        G["VertexAttribPointer"](0, 2, GL_FLOAT, 0, 0, None)
+        G["EnableVertexAttribArray"](0)
+        G["DrawArrays"](GL_TRIANGLE_STRIP, 0, 4)
+
+    def draw_full(self, prog, tex=None, unit=GL_TEXTURE0, uTexLoc=-1):
+        G["UseProgram"](prog)
+        if tex is not None:
+            G["ActiveTexture"](unit)
+            G["BindTexture"](GL_TEXTURE_2D, tex)
+            if uTexLoc >= 0:
+                G["Uniform1i"](uTexLoc, unit - GL_TEXTURE0)
+        G["Disable"](GL_BLEND)
+        self.draw_quad(self.vao_quad, self.vbo_quad)
+
+    def scene_pass(self, fbo, idx):
+        s = self.progs[idx]
+        G["BindFramebuffer"](GL_FRAMEBUFFER, fbo)
+        G["Viewport"](0, 0, self.w, self.h)
+        G["ClearColor"](0.0, 0.0, 0.0, 0.0)
+        G["Clear"](GL_COLOR_BUFFER_BIT)
+        G["UseProgram"](s)
+        G["Uniform1f"](self.uloc[idx][0], self.t)
+        G["Uniform2f"](self.uloc[idx][1], float(self.w), float(self.h))
+        self.draw_quad(self.vao_quad, self.vbo_quad)
+        G["Enable"](GL_BLEND)
+        G["BlendFunc"](GL_ONE, GL_ONE)
+        name = CYC[idx][0]
+        if CYC[idx][2] == "stars":
+            self.draw_points(self.parts["stars"], self.partsn["stars"], self.star_alpha)
+        elif CYC[idx][2] == "rain":
+            self.draw_lines(self.parts["rain"], self.partsn["rain"], self.rain_alpha)
+            self.draw_points(self.parts["splash"], self.partsn["splash"], self.splash_alpha)
+        elif CYC[idx][2] == "neon":
+            self.draw_points(self.parts["neon"], self.partsn["neon"], self.neon_alpha)
+            self.draw_trails(self.parts["neon"], self.partsn["neon"])
+        if name == "storm":
+            self.draw_bolts()
+
+    def render_scene(self, idx):
+        if self.next < 0:
+            self.scene_pass(self.fboA, idx)
+            G["BindFramebuffer"](GL_FRAMEBUFFER, self.fboM)
+            G["Viewport"](0, 0, self.w, self.h)
+            self.draw_full(self.prog_down, self.texA, GL_TEXTURE0, self.lb["down"]["uTex"])
+        else:
+            self.scene_pass(self.fboA, idx)
+            self.scene_pass(self.fboB, self.next)
+            G["BindFramebuffer"](GL_FRAMEBUFFER, self.fboM)
+            G["Viewport"](0, 0, self.w, self.h)
+            G["UseProgram"](self.prog_mix)
+            G["ActiveTexture"](GL_TEXTURE0)
+            G["BindTexture"](GL_TEXTURE_2D, self.texA)
+            G["Uniform1i"](self.lb["mix"]["uTexA"], 0)
+            G["ActiveTexture"](GL_TEXTURE1)
+            G["BindTexture"](GL_TEXTURE_2D, self.texB)
+            G["Uniform1i"](self.lb["mix"]["uTexB"], 1)
+            G["Uniform1f"](self.lb["mix"]["uT"], min(1.0, self.trans_t / self.trans))
+            G["Disable"](GL_BLEND)
+            self.draw_quad(self.vao_quad, self.vbo_quad)
+
+    def bloom_pass(self):
+        hw, hh = self.w // 2, self.h // 2
+        G["BindFramebuffer"](GL_FRAMEBUFFER, self.fboB1)
+        G["Viewport"](0, 0, hw, hh)
+        self.draw_full(self.prog_down, self.texM, GL_TEXTURE0, self.lb["down"]["uTex"])
+        G["BindFramebuffer"](GL_FRAMEBUFFER, self.fboB2)
+        G["Viewport"](0, 0, hw, hh)
+        G["UseProgram"](self.prog_blur)
+        G["ActiveTexture"](GL_TEXTURE0)
+        G["BindTexture"](GL_TEXTURE_2D, self.blurA)
+        G["Uniform1i"](self.lb["blur"]["uTex"], 0)
+        G["Uniform2f"](self.lb["blur"]["uDir"], 1.0 / hw, 0.0)
+        G["Uniform1f"](self.lb["blur"]["uRad"], 3.0)
+        G["Disable"](GL_BLEND)
+        self.draw_quad(self.vao_quad, self.vbo_quad)
+        G["BindFramebuffer"](GL_FRAMEBUFFER, self.fboB1)
+        G["Viewport"](0, 0, hw, hh)
+        G["UseProgram"](self.prog_blur)
+        G["ActiveTexture"](GL_TEXTURE0)
+        G["BindTexture"](GL_TEXTURE_2D, self.blurB)
+        G["Uniform1i"](self.lb["blur"]["uTex"], 0)
+        G["Uniform2f"](self.lb["blur"]["uDir"], 0.0, 1.0 / hh)
+        G["Uniform1f"](self.lb["blur"]["uRad"], 3.0)
+        self.draw_quad(self.vao_quad, self.vbo_quad)
+
+    def final_pass(self):
+        G["BindFramebuffer"](GL_FRAMEBUFFER, 0)
+        G["Viewport"](0, 0, self.w, self.h)
+        G["UseProgram"](self.prog_final)
+        G["ActiveTexture"](GL_TEXTURE0)
+        G["BindTexture"](GL_TEXTURE_2D, self.texM)
+        G["Uniform1i"](self.lb["final"]["uScene"], 0)
+        G["ActiveTexture"](GL_TEXTURE1)
+        G["BindTexture"](GL_TEXTURE_2D, self.blurA if self.bloom else self.texM)
+        G["Uniform1i"](self.lb["final"]["uBloom"], 1)
+        G["Uniform1f"](self.lb["final"]["uFlash"], self.flash)
+        G["Uniform1f"](self.lb["final"]["uExposure"], 1.0)
+        G["Uniform2f"](self.lb["final"]["uRes"], float(self.w), float(self.h))
+        G["Uniform1f"](self.lb["final"]["uTime"], self.t)
+        G["Disable"](GL_BLEND)
+        self.draw_quad(self.vao_quad, self.vbo_quad)
+
+    def upload_points(self, pts):
+        buf = array.array("f")
+        buf.fromlist(pts)
+        G["BindVertexArray"](self.vao_dyn)
+        G["BindBuffer"](GL_ARRAY_BUFFER, self.vbo_dyn)
+        G["BufferData"](GL_ARRAY_BUFFER, len(buf) * 4, buf.buffer_info()[0], GL_DYNAMIC_DRAW)
+        stride = 28
+        G["VertexAttribPointer"](0, 2, GL_FLOAT, 0, stride, None)
+        G["VertexAttribPointer"](1, 4, GL_FLOAT, 0, stride, C.c_void_p(8))
+        G["VertexAttribPointer"](2, 1, GL_FLOAT, 0, stride, C.c_void_p(24))
+        G["EnableVertexAttribArray"](0)
+        G["EnableVertexAttribArray"](1)
+        G["EnableVertexAttribArray"](2)
+        return len(buf) // 7
+
+    def draw_points(self, ps, n, prep):
+        G["UseProgram"](self.prog_part)
+        G["Uniform2f"](self.lb["part"]["uRes"], float(self.w), float(self.h))
+        pts = []
+        self._fill(ps, n, self.FIELDS, prep, pts, False)
+        if not pts:
+            return
+        cnt = self.upload_points(pts)
+        G["DrawArrays"](GL_POINTS, 0, cnt)
+
+    def draw_lines(self, ps, n, prep):
+        G["UseProgram"](self.prog_part)
+        G["Uniform2f"](self.lb["part"]["uRes"], float(self.w), float(self.h))
+        pts = []
+        self._fill(ps, n, self.FIELDS, prep, pts, True)
+        if not pts:
+            return
+        cnt = self.upload_points(pts)
+        G["DrawArrays"](GL_LINES, 0, cnt)
+
+    def draw_trails(self, ps, n):
+        G["UseProgram"](self.prog_part)
+        G["Uniform2f"](self.lb["part"]["uRes"], float(self.w), float(self.h))
+        rand = random.random
+        pts = []
+        f = self.FIELDS
+        for i in range(n):
+            o = i * f
+            x, y = ps[o], ps[o + 1]
+            vx, vy = ps[o + 2], ps[o + 3]
+            pts.extend((x - vx * 0.06, y - vy * 0.06, 0.35, 0.35, 0.55, 0.10, 1.8))
+        if not pts:
+            return
+        cnt = self.upload_points(pts)
+        G["DrawArrays"](GL_POINTS, 0, cnt)
+
+    def _fill(self, ps, n, k, prep, pts, lines):
+        for i in range(n):
+            o = i * k
+            res = prep(ps, o)
+            if res is None:
+                continue
+            ax, ay, ar, ag, ab, aa, asz = res
+            pts.extend((ax, ay, ar, ag, ab, aa, asz))
+            if lines:
+                pts.extend((ax + ps[o + 2], ay - ps[o + 3] * 130.0, ar * 0.8, ag * 0.8, ab * 0.8, aa * 0.6, asz * 0.7))
+
+    def star_alpha(self, ps, o):
+        x, y = ps[o], ps[o + 1]
+        ph, sp, sz, ci = ps[o + 4], ps[o + 5], ps[o + 6], int(ps[o + 7])
+        tw = 0.5 + 0.5 * math.sin(self.t * sp + ph)
+        r, g, b = COLORS[ci]
+        return (x, y, r / 255.0, g / 255.0, b / 255.0, 0.35 + 0.55 * tw, sz)
+
+    def rain_alpha(self, ps, o):
+        x, y = ps[o], ps[o + 1]
+        sz, ci = ps[o + 6], int(ps[o + 7])
+        r, g, b = COLORS[ci]
+        lyr = 1.0 if sz > 2.0 else (0.7 if sz > 1.6 else 0.45)
+        return (x, y, r / 255.0, g / 255.0, b / 255.0, lyr, sz)
+
+    def splash_alpha(self, ps, o):
+        life = ps[o + 4]
+        if life <= 0:
+            return None
+        x, y = ps[o], ps[o + 1]
+        ci = int(ps[o + 7])
+        r, g, b = COLORS[ci]
+        return (x, y, r / 255.0, g / 255.0, b / 255.0, min(1.0, life * 6.0), ps[o + 6] * (0.4 + life))
+
+    def neon_alpha(self, ps, o):
+        x, y = ps[o], ps[o + 1]
+        ci = int(ps[o + 7])
+        r, g, b = COLORS[ci]
+        return (x, y, r / 255.0, g / 255.0, b / 255.0, 0.5, ps[o + 6])
+
+    def draw_bolts(self):
+        for b in self.bolts:
+            if b["age"] > b["life"]:
+                continue
+            base = b["pts"]
+            nseg = len(base) - 1
+            bv = array.array("f")
+            for p_idx in range(4):
+                wdt = (32, 12, 4, 2)[p_idx]
+                alp = (0.05, 0.12, 0.4, 1.0)[p_idx]
+                flick = 0.7 + 0.6 * random.random() if b["age"] > 0.05 else 1.0
+                a = alp * flick * (1.0 - b["age"] / b["life"]) * 0.5
+                for si in range(nseg):
+                    x0, y0 = base[si]
+                    x1, y1 = base[si + 1]
+                    dx, dy = x1 - x0, y1 - y0
+                    d = math.hypot(dx, dy) or 1.0
+                    nx, ny = -dy / d * wdt, dx / d * wdt
+                    if p_idx == 0:
+                        c = (0.9, 0.9, 0.95)
+                    elif p_idx == 1:
+                        c = (0.341, 0.82, 0.918)
+                    else:
+                        c = (0.965, 0.965, 0.933)
+                    bv.extend((x0 + nx, y0 + ny, c[0], c[1], c[2], a * 0.35, 1.0))
+                    bv.extend((x0 - nx, y0 - ny, c[0], c[1], c[2], a * 0.35, 1.0))
+                    bv.extend((x1 + nx, y1 + ny, c[0], c[1], c[2], a * 0.35, 1.0))
+                    bv.extend((x1 + nx, y1 + ny, c[0], c[1], c[2], a * 0.35, 1.0))
+                    bv.extend((x1 - nx, y1 - ny, c[0], c[1], c[2], a * 0.35, 1.0))
+                    bv.extend((x0 - nx, y0 - ny, c[0], c[1], c[2], a * 0.35, 1.0))
+            if not bv:
+                continue
+            G["UseProgram"](self.prog_part)
+            G["Uniform2f"](self.lb["part"]["uRes"], float(self.w), float(self.h))
+            cnt = self.upload_points(list(bv))
+            G["DrawArrays"](GL_TRIANGLES, 0, cnt)
+
+    def spawn_bolt(self):
+        w, h = self.w, self.h
+        x = random.uniform(0.08, 0.92) * w
+        pts = self._midpoint((x, 0.04 * h), (x + random.uniform(-0.1, 0.1) * w, 0.64 * h), 5, 0.06 * h)
+        self.bolts.append({"pts": pts, "age": 0.0, "life": random.uniform(0.28, 0.42)})
+        self.flash = min(1.0, self.flash + 0.55)
+
+    def _midpoint(self, a, b, depth, jit):
+        if depth == 0:
+            return [a, b]
+        mx, my = (a[0] + b[0]) / 2 + random.uniform(-jit, jit), (a[1] + b[1]) / 2 + random.uniform(-jit * 0.5, jit * 0.5)
+        left = self._midpoint(a, (mx, my), depth - 1, jit * 0.55)
+        right = self._midpoint((mx, my), b, depth - 1, jit * 0.55)
+        return left + right[1:]
+
+    def update(self, dt):
+        self.t += dt
+        self.flash = max(0.0, self.flash - dt * 0.8)
+        if self.next >= 0:
+            self.trans_t += dt
+            if self.trans_t >= self.trans:
+                self.scene = self.next
+                self.next = -1
+        for b in self.bolts:
+            b["age"] += dt
+        self.bolts = [b for b in self.bolts if b["age"] < b["life"]]
+        name = CYC[self.scene][0]
+        if name == "storm":
+            self.next_bolt -= dt
+            if self.next_bolt <= 0:
+                self.spawn_bolt()
+                self.next_bolt = random.uniform(4.0, 8.0)
+        if name == "rain":
+            self._update_rain(dt)
+        elif name == "neon":
+            self._update_neon(dt)
+        elif name == "starfall":
+            self._update_starfall(dt)
+        elif name == "aurora":
+            self._update_aurora(dt)
+
+    def _update_rain(self, dt):
+        ps = self.parts["rain"]
+        sp = self.parts["splash"]
+        w, h = self.w, self.h
+        ground = 0.93 * h
+        for i in range(self.partsn["rain"]):
+            o = i * self.FIELDS
+            ps[o + 1] += ps[o + 3] * h * dt * 0.85
+            ps[o] += ps[o + 2] * dt * 0.2
+            if ps[o + 1] > ground:
+                self._splash(sp, ps[o], ground, int(ps[o + 7]))
+                ps[o] = random.uniform(0, w)
+                ps[o + 1] = random.uniform(-h * 0.6, -40)
+        for i in range(self.partsn["splash"]):
+            o = i * self.FIELDS
+            if sp[o + 4] <= 0:
+                continue
+            sp[o] += sp[o + 2] * dt
+            sp[o + 1] += sp[o + 3] * dt
+            sp[o + 3] += 600 * dt
+            sp[o + 4] -= dt
+
+    def _splash(self, sp, x, y, ci):
+        for i in range(self.partsn["splash"]):
+            o = i * self.FIELDS
+            if sp[o + 4] > 0:
+                continue
+            sp[o] = x
+            sp[o + 1] = y
+            ang = random.uniform(0, math.pi)
+            v = random.uniform(40, 260)
+            sp[o + 2] = math.cos(ang) * v
+            sp[o + 3] = -math.sin(ang) * v * 0.7
+            sp[o + 4] = random.uniform(0.12, 0.3)
+            sp[o + 6] = random.uniform(1.5, 3.0)
+            sp[o + 7] = ci
+            return
+
+    def _update_neon(self, dt):
+        ps = self.parts["neon"]
+        w, h = self.w, self.h
+        mx, my = self.mouse
+        repel = self.focus
+        for i in range(self.partsn["neon"]):
+            o = i * self.FIELDS
+            x, y = ps[o], ps[o + 1]
+            vx, vy = ps[o + 2], ps[o + 3]
+            vx += math.sin(self.t * 0.4 + y * 0.003) * 8 * dt
+            vy += math.cos(self.t * 0.35 + x * 0.002) * 6 * dt
+            vx *= 0.985
+            vy *= 0.985
+            vx = max(-160, min(160, vx + (random.random() - 0.5) * 20 * dt))
+            vy = max(-160, min(160, vy + (random.random() - 0.5) * 20 * dt))
+            if repel:
+                dx, dy = x - mx, y - my
+                d2 = dx * dx + dy * dy
+                if d2 < 300 * 300:
+                    d = math.sqrt(d2) or 1.0
+                    f = (1.0 - d / 300.0)
+                    vx += dx / d * f * 900 * dt
+                    vy += dy / d * f * 900 * dt
+            x += vx * dt
+            y += vy * dt
+            if x < -20:
+                x = w + 20
+            elif x > w + 20:
+                x = -20
+            if y < -20:
+                y = h + 20
+            elif y > h + 20:
+                y = -20
+            ps[o] = x
+            ps[o + 1] = y
+            ps[o + 2] = vx
+            ps[o + 3] = vy
+
+    def _update_starfall(self, dt):
+        pass
+
+    def _update_aurora(self, dt):
+        pass
+
+    def render(self):
+        self.render_scene(self.scene)
+        self.bloom_pass()
+        self.final_pass()
+        SDL.SDL_GL_SwapWindow(self._win)
+
+    def poll(self):
+        ev = (C.c_ubyte * 64)()
+        while SDL.SDL_PollEvent(ev):
+            t = ev[0]
+            if t == SDL_QUIT:
+                return False
+            if t == SDL_KEYDOWN:
+                scan = int(ev[16])
+                if int(ev[13]):
+                    continue
+                key = KEYMAP.get(scan)
+                if key == "q" or key == "esc":
+                    return False
+                n = len(CYC)
+                if key == "left":
+                    self.goto((self.scene - 1) % n)
+                elif key == "right":
+                    self.goto((self.scene + 1) % n)
+                elif key == "up":
+                    self.goto((self.scene - 3) % n)
+                elif key == "down":
+                    self.goto((self.scene + 3) % n)
+                elif key == "space":
+                    self.paused = not self.paused
+                    self.notify("paused" if self.paused else "resumed")
+                elif key == "r":
+                    self.goto(random.randrange(n))
+                elif key == "g":
+                    self.bloom = not self.bloom
+                    self.notify("bloom " + ("on" if self.bloom else "off"))
+                elif key == "f":
+                    self.focus = not self.focus
+                    self.notify("mouse " + ("on" if self.focus else "off"))
+                elif key in ("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"):
+                    idx = int(key) - 1 if key != "0" else 9
+                    self.goto(idx)
+            if t == SDL_MOUSEMOTION:
+                pass
+        mx, my = C.c_int(0), C.c_int(0)
+        SDL.SDL_GetGlobalMouseState(C.byref(mx), C.byref(my))
+        self.mouse = (self._wx + mx.value, self._wy + my.value)
+        return True
+
+    def goto(self, idx):
+        if idx == self.scene:
+            return
+        self.next = idx
+        self.trans_t = 0.0
+        self.notify(CYC[idx][0])
+
+    def check_cmds(self):
+        try:
+            mt = os.path.getmtime(self.cmd_file)
+            if mt <= self.cmd_mtime:
+                return
+            self.cmd_mtime = mt
+            with open(self.cmd_file) as f:
+                cmd = f.read().strip()
+            os.remove(self.cmd_file)
+        except FileNotFoundError:
+            return
+        except OSError:
+            return
+        n = len(CYC)
+        if cmd == "next":
+            self.goto((self.scene + 1) % n)
+        elif cmd == "prev":
+            self.goto((self.scene - 1) % n)
+        elif cmd == "random":
+            self.goto(random.randrange(n))
+        elif cmd == "pause":
+            self.paused = not self.paused
+            self.notify("paused" if self.paused else "resumed")
+        elif cmd == "bloom":
+            self.bloom = not self.bloom
+            self.notify("bloom " + ("on" if self.bloom else "off"))
+        elif cmd == "focus":
+            self.focus = not self.focus
+            self.notify("mouse " + ("on" if self.focus else "off"))
+        elif cmd.isdigit():
+            idx = int(cmd) - 1 if cmd != "0" else 9
+            self.goto(idx % n)
+        elif cmd == "quit":
+            die(0, None)
+
+    def properties(self):
+        try:
+            out = subprocess.run(["xdotool", "search", "--pid", str(os.getpid())],
+                                 capture_output=True, text=True, timeout=5)
+            xid = out.stdout.strip().split("\n")[0]
+            if xid.isdigit():
+                subprocess.run(["xprop", "-id", xid, "-f", "_NET_WM_WINDOW_TYPE", "32a",
+                                "-set", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_DESKTOP"],
+                               capture_output=True, timeout=3)
+                subprocess.run(["xprop", "-id", xid, "-f", "_NET_WM_STATE", "32a",
+                                "-set", "_NET_WM_STATE", "_NET_WM_STATE_BELOW"],
+                               capture_output=True, timeout=3)
+        except Exception:
+            pass
+
+    def lower_window(self):
+        try:
+            if self._xid > 0:
+                subprocess.run(["xdotool", "windowlower", str(self._xid)], capture_output=True, timeout=3)
+        except Exception:
+            pass
+
+
+def _x11():
+    if not hasattr(_x11, "d"):
+        x11 = C.CDLL("libX11.so.6")
+        x11.XOpenDisplay.argtypes = [C.c_char_p]
+        x11.XOpenDisplay.restype = C.c_void_p
+        x11.XDefaultRootWindow.argtypes = [C.c_void_p]
+        x11.XDefaultRootWindow.restype = C.c_ulong
+        x11.XInternAtom.argtypes = [C.c_void_p, C.c_char_p, C.c_int]
+        x11.XInternAtom.restype = C.c_ulong
+        x11.XGetWindowProperty.argtypes = [C.c_void_p, C.c_ulong, C.c_ulong, C.c_long,
+                                           C.c_long, C.c_int, C.c_ulong,
+                                           C.POINTER(C.c_ulong), C.POINTER(C.c_int),
+                                           C.POINTER(C.c_ulong), C.POINTER(C.c_ulong),
+                                           C.POINTER(C.c_void_p)]
+        x11.XGetWindowProperty.restype = C.c_int
+        x11.XQueryTree.argtypes = [C.c_void_p, C.c_ulong, C.POINTER(C.c_ulong),
+                                   C.POINTER(C.c_ulong), C.POINTER(C.POINTER(C.c_ulong)),
+                                   C.POINTER(C.c_uint)]
+        x11.XQueryTree.restype = C.c_int
+        x11.XFree.argtypes = [C.c_void_p]
+        x11.XFree.restype = C.c_int
+        x11.XMapWindow.argtypes = [C.c_void_p, C.c_ulong]
+        x11.XMapWindow.restype = C.c_int
+        x11.XFlush.argtypes = [C.c_void_p]
+        x11.XFlush.restype = C.c_int
+        x11.XResizeWindow.argtypes = [C.c_void_p, C.c_ulong, C.c_uint, C.c_uint]
+        x11.XMoveWindow.argtypes = [C.c_void_p, C.c_ulong, C.c_int, C.c_int]
+        x11.XChangeWindowAttributes.argtypes = [C.c_void_p, C.c_ulong, C.c_ulong, C.c_void_p]
+        x11.XMoveResizeWindow.argtypes = [C.c_void_p, C.c_ulong, C.c_int, C.c_int, C.c_uint, C.c_uint]
+
+        class XSetWindowAttributes(C.Structure):
+            _fields_ = [("b0", C.c_ulong), ("b1", C.c_ulong), ("b2", C.c_ulong),
+                        ("b3", C.c_ulong), ("b4", C.c_ulong), ("b5", C.c_ulong),
+                        ("b6", C.c_ulong), ("b7", C.c_ulong), ("b8", C.c_ulong),
+                        ("b9", C.c_ulong), ("b10", C.c_ulong), ("b11", C.c_ulong),
+                        ("override_redirect", C.c_ulong), ("b13", C.c_ulong),
+                        ("b14", C.c_ulong), ("b15", C.c_ulong)]
+        _x11.attr_t = XSetWindowAttributes
+        _x11.d = x11
+    return _x11.d
+
+
+def _x11_owned_by(pid):
+    x11 = _x11()
+    x11.XOpenDisplay.argtypes = [C.c_char_p]
+    x11.XOpenDisplay.restype = C.c_void_p
+    x11.XDefaultRootWindow.argtypes = [C.c_void_p]
+    x11.XDefaultRootWindow.restype = C.c_ulong
+    x11.XInternAtom.argtypes = [C.c_void_p, C.c_char_p, C.c_int]
+    x11.XInternAtom.restype = C.c_ulong
+    x11.XGetWindowProperty.argtypes = [C.c_void_p, C.c_ulong, C.c_ulong, C.c_long,
+                                       C.c_long, C.c_int, C.c_ulong,
+                                       C.POINTER(C.c_ulong), C.POINTER(C.c_int),
+                                       C.POINTER(C.c_ulong), C.POINTER(C.c_ulong),
+                                       C.POINTER(C.c_void_p)]
+    x11.XGetWindowProperty.restype = C.c_int
+    x11.XQueryTree.argtypes = [C.c_void_p, C.c_ulong, C.POINTER(C.c_ulong),
+                               C.POINTER(C.c_ulong), C.POINTER(C.POINTER(C.c_ulong)),
+                               C.POINTER(C.c_uint)]
+    x11.XQueryTree.restype = C.c_int
+    x11.XFree.argtypes = [C.c_void_p]
+    x11.XFree.restype = C.c_int
+    x11.XMapWindow.argtypes = [C.c_void_p, C.c_ulong]
+    x11.XMapWindow.restype = C.c_int
+    x11.XFlush.argtypes = [C.c_void_p]
+    x11.XFlush.restype = C.c_int
+    dpy = x11.XOpenDisplay(None)
+    if not dpy:
+        return -1
+    root = x11.XDefaultRootWindow(dpy)
+    pid_atom = x11.XInternAtom(dpy, b"_NET_WM_PID", 0)
+    found = -1
+
+    def walk(win, depth):
+        nonlocal found
+        if found != -1 or depth > 30:
+            return
+        prop = C.c_void_p(0)
+        atype = C.c_ulong(0)
+        nfmt = C.c_int(0)
+        nitems = C.c_ulong(0)
+        after = C.c_ulong(0)
+        st = x11.XGetWindowProperty(dpy, win, pid_atom, 0, 1, 0, 0,
+                                    C.byref(atype), C.byref(nfmt),
+                                    C.byref(nitems), C.byref(after), C.byref(prop))
+        if st == 0 and prop and nitems.value >= 1:
+            if C.cast(prop, C.POINTER(C.c_ulong)).contents.value == pid:
+                found = win
+                x11.XFree(prop)
+                return
+            x11.XFree(prop)
+        children = C.POINTER(C.c_ulong)()
+        n = C.c_uint(0)
+        r = C.c_ulong(0)
+        p = C.c_ulong(0)
+        if x11.XQueryTree(dpy, win, C.byref(r), C.byref(p), C.byref(children), C.byref(n)) == 0:
+            return
+        for i in range(n.value):
+            walk(children[i], depth + 1)
+            if found != -1:
+                break
+        if children:
+            x11.XFree(children)
+
+    walk(root, 0)
+    return found
+
+
+def _fixup_window(win):
+    xid = _x11_owned_by(os.getpid())
+    print("xid:", xid, file=sys.stderr)
+    if xid > 0:
+        subprocess.run(["xprop", "-id", str(xid), "-f", "_NET_WM_WINDOW_TYPE", "32a",
+                        "-set", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_DESKTOP"],
+                       capture_output=True, timeout=3)
+        subprocess.run(["xprop", "-id", str(xid), "-f", "_NET_WM_STATE", "32a",
+                        "-set", "_NET_WM_STATE", "_NET_WM_STATE_BELOW"],
+                       capture_output=True, timeout=3)
+    w, h = 3440, 1440
+    if xid > 0:
+        x11 = _x11()
+        dpy = x11.XOpenDisplay(None)
+        attrs = _x11.attr_t()
+        attrs.override_redirect = 1
+        x11.XChangeWindowAttributes(dpy, xid, 0x200, C.byref(attrs))
+        x11.XResizeWindow(dpy, xid, w, h)
+        x11.XMoveWindow(dpy, xid, 0, 0)
+        x11.XFlush(dpy)
+    print("size:", w, h, file=sys.stderr)
+    G["Enable"](GL_BLEND)
+    G["Enable"](GL_PROGRAM_POINT_SIZE)
+    G["BlendFunc"](GL_SRC_ALPHA, GL_ONE)
+    e = Engine(w, h)
+    e._win = win
+    e._xid = xid if xid > 0 else -1
+    if xid > 0:
+        x11 = _x11()
+        dpy = x11.XOpenDisplay(None)
+        x11.XMapWindow(dpy, xid)
+        x11.XMoveResizeWindow(dpy, xid, 0, 0, w, h)
+        x11.XFlush(dpy)
+        try:
+            subprocess.run(["i3-msg", '[title="wallygl"] floating enable, '
+                                       'move absolute position 0 0, resize set %d %d' % (w, h)],
+                           capture_output=True, timeout=3)
+        except Exception:
+            pass
+    return e
+
+
+def main():
+    pidfile = os.path.expanduser("~/.cache/wallygl.pid")
+    try:
+        old = int(open(pidfile).read().strip())
+        os.kill(old, 0)
+        print("wallygl already running pid", old)
+        return 0
+    except (FileNotFoundError, ValueError):
+        pass
+    except ProcessLookupError:
+        pass
+    with open(pidfile, "w") as f:
+        f.write(str(os.getpid()))
+
+    def die(sig, fr):
+        try:
+            os.remove(pidfile)
+        except OSError:
+            pass
+        SDL.SDL_Quit()
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, die)
+    signal.signal(signal.SIGINT, die)
+
+    SDL.SDL_SetHint(b"SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR", b"0")
+    if SDL.SDL_Init(SDL_INIT_VIDEO) != 0:
+        print("SDL init failed", file=sys.stderr)
+        return 1
+    SDL.SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3)
+    SDL.SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3)
+    SDL.SDL_GL_SetAttribute(SDL_GL_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE)
+    SDL.SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1)
+
+    b = SDL_Rect()
+    SDL.SDL_GetDisplayBounds(0, C.byref(b))
+    w, h = b.w, b.h
+    if w <= 0 or h <= 0:
+        w, h = 3440, 1440
+    win = SDL.SDL_CreateWindow(b"wallygl", b.x, b.y, w, h,
+                               SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIDDEN)
+    if not win:
+        print("window create failed", file=sys.stderr)
+        return 1
+    ctx = SDL.SDL_GL_CreateContext(win)
+    if not ctx:
+        print("context failed", file=sys.stderr)
+        return 1
+    SDL.SDL_GL_MakeCurrent(win, ctx)
+    SDL.SDL_GL_SetSwapInterval(0)
+    bind_gl()
+    ver = C.cast(G["GetString"](GL_VERSION), C.c_char_p).value
+    print("GL:", ver.decode(), file=sys.stderr)
+
+    e = _fixup_window(win)
+    wp = SDL_Point()
+    SDL.SDL_GetWindowPosition(win, C.byref(wp))
+    e._wx, e._wy = wp.x, wp.y
+    time.sleep(0.4)
+    if e._xid > 0:
+        x11 = _x11()
+        dpy = x11.XOpenDisplay(None)
+        x11.XMoveResizeWindow(dpy, e._xid, 0, 0, w, h)
+        x11.XFlush(dpy)
+    e.lower_window()
+    e._win = win
+
+    target = 1.0 / int(os.environ.get("WALLY_FPS", "120"))
+    last = time.time()
+    fcount = 0
+    fstat = time.time()
+    while True:
+        now = time.time()
+        dt = min(0.1, now - last)
+        last = now
+        if not e.paused:
+            e.update(dt)
+        if not e.poll():
+            break
+        e.check_cmds()
+        e.render()
+        fcount += 1
+        if now - fstat > 5.0:
+            print("fps: %.1f" % (fcount / (now - fstat)), file=sys.stderr)
+            fcount = 0
+            fstat = now
+        slp = target - (time.time() - now)
+        if slp > 0:
+            time.sleep(slp)
+
+    die(0, None)
+
+
+if __name__ == "__main__":
+    main()

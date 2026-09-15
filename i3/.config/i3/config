@@ -339,12 +339,15 @@ bindsym $mod+Shift+b exec --no-startup-id /home/alitoh/.local/bin/i3-border-puls
 bindsym $mod+w exec --no-startup-id /usr/bin/firefox
 bindsym $mod+c exec --no-startup-id /home/alitoh/.local/bin/whatsapp
 bindsym $mod+m exec --no-startup-id /home/alitoh/.local/bin/music
+bindsym $mod+s exec --no-startup-id /home/alitoh/.local/bin/slack
 bindsym $mod+y exec --no-startup-id /home/alitoh/.local/bin/youtube
 bindsym $mod+n exec --no-startup-id /usr/bin/thunar
 # NOTE: screenshot-select used to be $mod+Shift+p, but that binding was
 # duplicated with the picom preset menu above (picom menu wins).
 bindsym --release $mod+Shift+o exec --no-startup-id ~/.config/i3/scripts/screenshot-select
 bindsym --release $mod+o exec --no-startup-id ~/.config/i3/scripts/screenshot-active
+# fullscreen capture: whole desktop incl. all tiled windows
+bindsym --release $mod+Ctrl+Shift+o exec --no-startup-id ~/.config/i3/scripts/screenshot-full
 
 # Power Profiles menu switcher (rofi)
 bindsym $mod+Ctrl+p exec --no-startup-id ~/.config/i3/scripts/power-profiles

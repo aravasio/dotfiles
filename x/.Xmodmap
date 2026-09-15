@@ -1,0 +1,29 @@
+! ===================================================================
+! Mac-style modifier swap (physical Win <-> Ctrl), for alitoh's i3 box.
+!
+! Goal: on macOS the big "command" modifier lives where the Win key is
+! on a PC keyboard (thumb key, next to the space bar). Linux puts app
+! shortcuts (copy/paste/close/save) on Ctrl, and i3 puts its WM mod on
+! Win (Mod4). This swaps them so muscle memory from a Mac feels right:
+!
+!   physical Win  -> emits Control  (so Win+C = copy, Win+W = close, etc.)
+!   physical Ctrl -> emits Super    (Mod4)  -> becomes the i3 mod key
+!
+! Consequences after this map is active:
+!   * App shortcuts (Ctrl+*): press the physical *Win* key.
+!   * i3 shortcuts (Mod4+*):   press the physical *Ctrl* key.
+!
+! To revert / disable: delete ~/.Xmodmap (or the line loading it in
+! ~/.xprofile) and log out/in. Nothing here is permanent.
+! ===================================================================
+
+remove Control = Control_L Control_R
+remove Mod4    = Super_L Super_R
+
+keycode  37 = Super_L      ! physical Left Ctrl  -> Super (i3 mod / Mod4)
+keycode 133 = Control_L    ! physical Left Win   -> Control (Mac-style Cmd)
+keycode 105 = Super_R      ! physical Right Ctrl -> Super
+keycode 134 = Control_R    ! physical Right Win  -> Control
+
+add Control = Control_L Control_R
+add Mod4    = Super_L Super_R

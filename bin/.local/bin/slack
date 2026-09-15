@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Launch Slack Desktop (self-contained at ~/.local/opt/slack)
+# Do NOT try to deduplicate here: Slack uses Electron's requestSingleInstanceLock
+# + second-instance, so re-launching with the callback URL (slack://...) is how
+# a running instance receives the login/auth callback and refocuses itself.
+# Any manual pgrep/focus guard here would swallow that callback. Let Electron do it.
+set -euo pipefail
+
+exec "${HOME}/.local/opt/slack/slack" --no-sandbox "$@"

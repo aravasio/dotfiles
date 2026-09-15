@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DIR="$HOME/Pictures/wallpapers"
+STATE="$HOME/.cache/bckg.idx"
+MPVPID="$HOME/.cache/bckg.mpv.pid"
+
+LIST=()
+for f in "$DIR"/wally-0*.png; do
+    LIST+=("$f")
+done
+N=${#LIST[@]}
+if (( N == 0 )); then
+    echo "no wally-0*.png in $DIR" >&2
+    exit 1
+fi
+
+kill_mpv() {
+    local pid
+    if [[ -f "$MPVPID" ]]; then
+        pid=$(cat "$MPVPID" 2>/dev/null || true)
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            sleep 0.3
+        fi
+    fi
+    rm -f "$MPVPID"
+    true
+}
+
+read_idx() {
+    local v=1
+    if [[ -f "$STATE" ]]; then
+        v=$(cat "$STATE" 2>/dev/null || echo 1)
+    fi
+    if ! [[ "$v" =~ ^[0-9]+$ ]] || (( v < 1 || v > N )); then
+        v=1
+    fi
+    echo "$v"
+}
+
+apply() {
+    local idx=$1
+    local file="${LIST[$((idx - 1))]}"
+    local stem="${file%.png}"
+    local name
+    name="$(basename "${stem}")"
+
+    kill_mpv
+    if [[ -f "${stem}.webm" ]]; then
+        mpv --wid=0 --loop=inf --no-audio --no-osc --no-input-default-bindings \
+            --osd-level=0 --really-quiet --panscan=1.0 "${stem}.webm" \
+            >/dev/null 2>&1 < /dev/null &
+        echo $! > "$MPVPID"
+        echo "$idx" > "$STATE"
+        notify-send -a bckg "Wallpaper $idx/$N" "$name (animated)" 2>/dev/null || true
+        echo "$name (animated) [$idx/$N]"
+    else
+        feh --bg-fill --no-xinerama "$file"
+        echo "$idx" > "$STATE"
+        notify-send -a bckg "Wallpaper $idx/$N" "$name" 2>/dev/null || true
+        echo "$name [$idx/$N]"
+    fi
+}
+
+cmd=${1:-next}
+case "$cmd" in
+    next)
+        cur=$(read_idx)
+        apply $((cur % N + 1))
+        ;;
+    prev)
+        cur=$(read_idx)
+        apply $(( (cur + N - 2) % N + 1 ))
+        ;;
+    restore)
+        apply "$(read_idx)"
+        ;;
+    random)
+        apply $(( (RANDOM % N) + 1 ))
+        ;;
+    list)
+        for i in "${!LIST[@]}"; do
+            stem="${LIST[$i]%.png}"
+            extra=""
+            [[ -f "${stem}.webm" ]] && extra=" (animated)"
+            printf '%02d %s%s\n' "$((i + 1))" "$(basename "${stem}")" "$extra"
+        done
+        ;;
+    current)
+        cur=$(read_idx)
+        apply "$cur"
+        ;;
+    *)
+        echo "usage: bckg {next|prev|restore|random|list|current}" >&2
+        exit 2
+        ;;
+esac
