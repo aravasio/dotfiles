@@ -16,7 +16,7 @@ TARGET="${TARGET:-$HOME}"
 TS="$(date +%Y%m%d-%H%M%S)"
 DRY_RUN="${DRY_RUN:-0}"
 
-ALL_PACKAGES=(i3 kitty picom rofi dunst zsh starship git tmux gtk x bin opencode theme-forge machine-facts claude codex wallpapers env)
+ALL_PACKAGES=(i3 kitty picom rofi dunst zsh starship git tmux gtk x bin opencode theme-forge machine-facts claude codex wallpapers env local)
 if [ $# -gt 0 ]; then
   PACKAGES=("$@")
 else
