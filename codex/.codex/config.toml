@@ -19,7 +19,7 @@ hide_full_access_warning = true
 "gpt-5.4-mini" = "gpt-5.6-luna"
 
 [tui]
-theme = "monokai-extended"
+theme = "monokai-boosted"
 status_line = ["model-with-reasoning", "context-remaining", "current-dir", "project-root", "git-branch", "five-hour-limit", "weekly-limit", "context-window-size", "used-tokens", "total-input-tokens", "total-output-tokens", "fast-mode"]
 
 [tui.model_availability_nux]
