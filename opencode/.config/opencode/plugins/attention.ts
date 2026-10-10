@@ -61,7 +61,7 @@ async function mark(title: string, body: string, urgency: string) {
   if (await isFocused()) return // you're already looking at it
   await setUrgent(true)
   await run(["notify-send", "-a", "OpenCode", "-u", urgency, "-t", "6000", title, body])
-  await run(["paplay", SOUND_WAITING])
+  await run(["paplay", "--volume=10000", SOUND_WAITING])
 }
 
 async function clear() {

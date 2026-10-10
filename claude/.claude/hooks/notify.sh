@@ -35,7 +35,7 @@ tab_color() {  # tab_color <active_bg|NONE>
 
 ding() {  # ding <sound-file>
   [[ -r "$1" ]] || return 0
-  (paplay "$1" >/dev/null 2>&1 &) || true
+  (paplay --volume=10000 "$1" >/dev/null 2>&1 &) || true
 }
 
 # Mark the whole i3 tile urgent (border + workspace button go red).
