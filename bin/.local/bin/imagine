@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# imagine — generate an image via OpenRouter's /api/v1/images endpoint.
+#
+#   imagine "prompt"                         # default model, opens result
+#   imagine -r ref.jpg -r ref2.png "prompt"  # with reference image(s) (path or URL)
+#   imagine -m openai/gpt-image-2 -a 16:9 "prompt"
+#   imagine -n 3 "prompt"                    # 3 runs (separate calls, separate files)
+#
+# Output: ~/Pictures/ai/<timestamp>-<slug>.<ext>   Cost is printed per image.
+# Key: $OPENROUTER_API_KEY, else read from ~/.hermes/.env.
+set -euo pipefail
+
+MODEL="${IMAGINE_MODEL:-google/gemini-nano-banana-2.1}"
+ASPECT="1:1"
+RUNS=1
+OPEN=1
+OUTDIR="${IMAGINE_DIR:-$HOME/Pictures/ai}"
+REFS=()
+
+usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+while getopts "m:a:r:n:o:xh" opt; do
+  case $opt in
+    m) MODEL=$OPTARG ;;
+    a) ASPECT=$OPTARG ;;
+    r) REFS+=("$OPTARG") ;;
+    n) RUNS=$OPTARG ;;
+    o) OUTDIR=$OPTARG ;;
+    x) OPEN=0 ;;
+    h) usage 0 ;;
+    *) usage 1 ;;
+  esac
+done
+shift $((OPTIND - 1))
+PROMPT="${*:-}"
+[[ -z $PROMPT ]] && usage 1
+
+KEY="${OPENROUTER_API_KEY:-}"
+if [[ -z $KEY && -f $HOME/.hermes/.env ]]; then
+  KEY=$(grep -m1 '^OPENROUTER_API_KEY=' "$HOME/.hermes/.env" | cut -d= -f2- | tr -d "\"'")
+fi
+[[ -z $KEY ]] && { echo "imagine: no OPENROUTER_API_KEY" >&2; exit 1; }
+
+mkdir -p "$OUTDIR"
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+
+# Build input_references as a JSON array (local files -> base64 data URLs).
+# Data URLs go through files (jq --rawfile), not argv: images blow ARG_MAX.
+echo "[]" > "$tmp/refs.json"
+for r in "${REFS[@]}"; do
+  if [[ $r =~ ^https?:// ]]; then printf '%s' "$r" > "$tmp/url"
+  else
+    [[ -f $r ]] || { echo "imagine: ref not found: $r" >&2; exit 1; }
+    { printf 'data:%s;base64,' "$(file -b --mime-type "$r")"; base64 -w0 "$r"; } > "$tmp/url"
+  fi
+  jq --rawfile u "$tmp/url" '. + [{type:"image_url",image_url:{url:$u}}]' "$tmp/refs.json" > "$tmp/refs.new"
+  mv "$tmp/refs.new" "$tmp/refs.json"
+done
+
+jq -n --arg m "$MODEL" --arg p "$PROMPT" --arg a "$ASPECT" --slurpfile rr "$tmp/refs.json" \
+  '$rr[0] as $r | {model:$m, prompt:$p, aspect_ratio:$a} + (if ($r|length)>0 then {input_references:$r} else {} end)' \
+  > "$tmp/req.json"
+
+slug=$(tr '[:upper:]' '[:lower:]' <<<"$PROMPT" | tr -cs 'a-z0-9' '-' | cut -c1-40 | sed 's/-$//')
+last=""
+for ((i = 1; i <= RUNS; i++)); do
+  echo "→ $MODEL ($i/$RUNS)…" >&2
+  curl -sS https://openrouter.ai/api/v1/images \
+    -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+    -d @"$tmp/req.json" -o "$tmp/resp.json"
+  if ! jq -e '.data[0].b64_json' "$tmp/resp.json" >/dev/null 2>&1; then
+    echo "imagine: error: $(jq -c '.error // .' "$tmp/resp.json" | cut -c1-400)" >&2; exit 1
+  fi
+  mime=$(jq -r '.data[0].media_type // "image/png"' "$tmp/resp.json")
+  ext=${mime#image/}; [[ $ext == jpeg ]] && ext=jpg
+  out="$OUTDIR/$(date +%Y%m%d-%H%M%S)-$slug-$i.$ext"
+  jq -r '.data[0].b64_json' "$tmp/resp.json" | base64 -d > "$out"
+  printf '%s  ($%s)\n' "$out" "$(jq -r '.usage.cost // "?"' "$tmp/resp.json")"
+  last=$out
+done
+
+if ((OPEN)) && [[ -n ${DISPLAY:-} ]] && command -v feh >/dev/null; then
+  (feh --scale-down "$OUTDIR" --start-at "$last" &>/dev/null &)
+fi
